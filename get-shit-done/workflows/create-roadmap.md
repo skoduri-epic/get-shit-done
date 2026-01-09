@@ -395,12 +395,18 @@ Resume file: None
 <step name="git_commit_initialization">
 Commit project initialization (brief + roadmap + state together):
 
+**Check for multi-repo mode first:**
+
 ```bash
-git add .planning/PROJECT.md .planning/ROADMAP.md .planning/STATE.md
-git add .planning/phases/
-# config.json if exists
-git add .planning/config.json 2>/dev/null
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping git commit (roadmap created in .planning/)"
+else
+    git add .planning/PROJECT.md .planning/ROADMAP.md .planning/STATE.md
+    git add .planning/phases/
+    # config.json if exists
+    git add .planning/config.json 2>/dev/null
+    git commit -m "$(cat <<'EOF'
 docs: initialize [project-name] ([N] phases)
 
 [One-liner from PROJECT.md]
@@ -411,9 +417,11 @@ Phases:
 3. [phase-name]: [goal]
 EOF
 )"
+    echo "Committed: docs: initialize [project] ([N] phases)"
+fi
 ```
 
-Confirm: "Committed: docs: initialize [project] ([N] phases)"
+Confirm success message based on mode.
 </step>
 
 <step name="offer_next">

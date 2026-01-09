@@ -38,16 +38,40 @@ Creates `.planning/` with PROJECT.md and config.json.
    [ -f .planning/PROJECT.md ] && echo "ERROR: Project already initialized. Use /gsd:progress" && exit 1
    ```
 
-2. **Initialize git repo in THIS directory** (required even if inside a parent repo):
+2. **Check for multi-repo mode OR initialize git repo:**
    ```bash
-   # Check if THIS directory is already a git repo root (handles .git file for worktrees too)
-   if [ -d .git ] || [ -f .git ]; then
+   # Check for multi-repo config (skip git init entirely)
+   MULTI_REPO="no"
+   if [ -f .planning/config.json ]; then
+       MULTI_REPO=$(grep -q '"multiRepo":\s*true' .planning/config.json && echo "yes" || echo "no")
+   fi
+
+   if [ "$MULTI_REPO" = "yes" ]; then
+       echo "Multi-repo mode: skipping git init"
+   elif [ -d .git ] || [ -f .git ]; then
        echo "Git repo exists in current directory"
    else
-       git init
-       echo "Initialized new git repo"
+       # Check if parent directories contain separate git repos (multi-repo detection)
+       CHILD_REPOS=$(find . -maxdepth 2 -name ".git" -type d 2>/dev/null | grep -v "^\./\.git$" | head -3)
+       if [ -n "$CHILD_REPOS" ]; then
+           echo "MULTI_REPO_DETECTED"
+           echo "Detected git repos in subdirectories - this appears to be a multi-repo workspace"
+       else
+           git init
+           echo "Initialized new git repo"
+       fi
    fi
    ```
+
+   **If MULTI_REPO_DETECTED:**
+   Use AskUserQuestion:
+   - header: "Multi-Repo"
+   - question: "Detected git repos in subdirectories. Initialize as monorepo or keep multi-repo structure?"
+   - options:
+     - "Keep multi-repo" — Skip git init, create .planning only (Recommended for existing multi-repo projects)
+     - "Create monorepo" — Initialize git at root level
+
+   If "Keep multi-repo": Set `MULTI_REPO="yes"` and continue without git init.
 
 3. **Detect existing code (brownfield detection):**
    ```bash
@@ -254,9 +278,15 @@ Create `.planning/config.json` with chosen mode and depth using `templates/confi
 
 <step name="commit">
 
+**Skip git operations in multi-repo mode:**
+
 ```bash
-git add .planning/PROJECT.md .planning/config.json
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping git commit (files created in .planning/)"
+else
+    git add .planning/PROJECT.md .planning/config.json
+    git commit -m "$(cat <<'EOF'
 docs: initialize [project-name]
 
 [One-liner from PROJECT.md]
@@ -264,6 +294,7 @@ docs: initialize [project-name]
 Creates PROJECT.md with requirements and constraints.
 EOF
 )"
+fi
 ```
 
 </step>
@@ -309,7 +340,7 @@ Project initialized:
 - [ ] PROJECT.md captures full context with evolutionary structure
 - [ ] Requirements initialized as hypotheses (greenfield) or with inferred Validated (brownfield)
 - [ ] Key Decisions table initialized
-- [ ] config.json has workflow mode
-- [ ] All committed to git
+- [ ] config.json has workflow mode (and multiRepo flag if applicable)
+- [ ] All committed to git (OR skipped if multiRepo: true)
 
 </success_criteria>

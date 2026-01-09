@@ -1,6 +1,7 @@
 {
   "mode": "interactive",
   "depth": "standard",
+  "multiRepo": false,
   "gates": {
     "confirm_project": true,
     "confirm_phases": true,
