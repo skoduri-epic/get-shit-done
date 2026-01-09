@@ -1,6 +1,7 @@
 {
   "mode": "interactive",
   "depth": "standard",
+  "multiRepo": false,
   "parallelization": {
     "enabled": true,
     "plan_level": true,

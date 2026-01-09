@@ -29,8 +29,43 @@ The git log should read like a changelog of what shipped, not a diary of plannin
 [ -d .git ] && echo "GIT_EXISTS" || echo "NO_GIT"
 ```
 
-If NO_GIT: Run `git init` silently. GSD projects always get their own repo.
+**Standard mode:** If NO_GIT: Run `git init` silently. GSD projects always get their own repo.
+
+**Multi-repo mode:** If `config.json` contains `"multiRepo": true`, skip ALL git operations.
+This mode is for workspaces with separate git repos per service (e.g., backend/, frontend/, infrastructure/).
 </git_check>
+
+<multi_repo_support>
+
+## Multi-Repo Mode
+
+For projects with multiple separate git repositories (not a monorepo), set `multiRepo: true` in config.json.
+
+**When enabled:**
+- `/gsd:new-project` will NOT run `git init`
+- All commit steps are skipped
+- Planning files are created in `.planning/` but never committed
+- The `.planning/` folder acts as cross-repo coordination
+
+**When to use:**
+- Workspace root containing separate service repos (backend/, frontend/, etc.)
+- Each service has its own git history and deployment
+- `.planning/` folder is intentionally untracked
+
+**Detection:**
+GSD will auto-detect multi-repo projects by looking for `.git` folders in subdirectories.
+It will prompt to choose between monorepo and multi-repo mode.
+
+**Config example:**
+```json
+{
+  "mode": "interactive",
+  "multiRepo": true,
+  "skipGitInit": true
+}
+```
+
+</multi_repo_support>
 
 <commit_formats>
 

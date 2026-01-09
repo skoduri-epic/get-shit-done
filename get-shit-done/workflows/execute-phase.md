@@ -12,6 +12,22 @@ Read STATE.md before any operation to load project context.
 
 <process>
 
+<step name="check_multi_repo" priority="first">
+**Check if multi-repo mode is enabled:**
+
+```bash
+# Multi-repo check - store result for later git operations
+MULTI_REPO="no"
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    MULTI_REPO="yes"
+    echo "Multi-repo mode: git operations will be skipped"
+fi
+```
+
+**If MULTI_REPO="yes":** All git add/commit operations in this workflow should be skipped.
+Tasks still execute normally, but code is not committed (individual repos handle their own git).
+</step>
+
 <step name="load_project_state" priority="first">
 Before any operation, read project state:
 

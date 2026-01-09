@@ -47,15 +47,40 @@ This is the most leveraged moment in any project. Deep questioning here means be
    [ -f .planning/PROJECT.md ] && echo "ERROR: Project already initialized. Use /gsd:progress" && exit 1
    ```
 
-2. **Initialize git repo in THIS directory** (required even if inside a parent repo):
+2. **Check for multi-repo mode OR initialize git repo:**
    ```bash
-   if [ -d .git ] || [ -f .git ]; then
+   # Check for multi-repo config (skip git init entirely)
+   MULTI_REPO="no"
+   if [ -f .planning/config.json ]; then
+       MULTI_REPO=$(grep -q '"multiRepo":\s*true' .planning/config.json && echo "yes" || echo "no")
+   fi
+
+   if [ "$MULTI_REPO" = "yes" ]; then
+       echo "Multi-repo mode: skipping git init"
+   elif [ -d .git ] || [ -f .git ]; then
        echo "Git repo exists in current directory"
    else
-       git init
-       echo "Initialized new git repo"
+       # Check if parent directories contain separate git repos (multi-repo detection)
+       CHILD_REPOS=$(find . -maxdepth 2 -name ".git" -type d 2>/dev/null | grep -v "^\./\.git$" | head -3)
+       if [ -n "$CHILD_REPOS" ]; then
+           echo "MULTI_REPO_DETECTED"
+           echo "Detected git repos in subdirectories - this appears to be a multi-repo workspace"
+       else
+           git init
+           echo "Initialized new git repo"
+       fi
    fi
    ```
+
+   **If MULTI_REPO_DETECTED:**
+   Use AskUserQuestion:
+   - header: "Multi-Repo"
+   - question: "Detected git repos in subdirectories. Initialize as monorepo or keep multi-repo structure?"
+   - options:
+     - "Keep multi-repo" — Skip git init, create .planning only (Recommended for existing multi-repo projects)
+     - "Create monorepo" — Initialize git at root level
+
+   If "Keep multi-repo": Set `MULTI_REPO="yes"` and continue without git init.
 
 3. **Detect existing code (brownfield detection):**
    ```bash
@@ -224,15 +249,22 @@ Do not compress. Capture everything gathered.
 
 **Commit PROJECT.md:**
 
+**Skip git operations in multi-repo mode:**
+
 ```bash
 mkdir -p .planning
-git add .planning/PROJECT.md
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping git commit (files created in .planning/)"
+else
+    git add .planning/PROJECT.md .planning/config.json
+    git commit -m "$(cat <<'EOF'
 docs: initialize project
 
 [One-liner from PROJECT.md What This Is section]
 EOF
 )"
+fi
 ```
 
 ## Phase 5: Workflow Preferences
@@ -874,11 +906,11 @@ Present completion with next steps:
 <success_criteria>
 
 - [ ] .planning/ directory created
-- [ ] Git repo initialized
+- [ ] Git repo initialized (OR skipped if multiRepo: true)
 - [ ] Brownfield detection completed
 - [ ] Deep questioning completed (threads followed, not rushed)
 - [ ] PROJECT.md captures full context → **committed**
-- [ ] config.json has workflow mode, depth, parallelization → **committed**
+- [ ] config.json has workflow mode, depth, parallelization (and multiRepo flag if applicable) → **committed**
 - [ ] Research completed (if selected) — 4 parallel agents spawned → **committed**
 - [ ] Requirements gathered (from research or conversation)
 - [ ] User scoped each category (v1/v2/out of scope)
@@ -891,6 +923,6 @@ Present completion with next steps:
 - [ ] REQUIREMENTS.md traceability updated
 - [ ] User knows next step is `/gsd:discuss-phase 1`
 
-**Atomic commits:** Each phase commits its artifacts immediately. If context is lost, artifacts persist.
+**Atomic commits:** Each phase commits its artifacts immediately. If context is lost, artifacts persist. (Git commits skipped in multiRepo mode — .planning/ acts as local storage only.)
 
 </success_criteria>
