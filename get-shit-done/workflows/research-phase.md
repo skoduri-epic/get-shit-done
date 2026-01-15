@@ -379,11 +379,15 @@ What's next?
 </step>
 
 <step name="git_commit">
-Commit phase research:
+Commit phase research (unless multi-repo mode):
 
 ```bash
-git add .planning/phases/${PHASE}-${SLUG}/${PHASE}-RESEARCH.md
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping git commit (RESEARCH.md created in .planning/)"
+else
+    git add .planning/phases/${PHASE}-${SLUG}/${PHASE}-RESEARCH.md
+    git commit -m "$(cat <<'EOF'
 docs(${PHASE}): complete phase research
 
 Phase ${PHASE}: ${PHASE_NAME}
@@ -392,9 +396,10 @@ Phase ${PHASE}: ${PHASE_NAME}
 - Common pitfalls catalogued
 EOF
 )"
+fi
 ```
 
-Confirm: "Committed: docs(${PHASE}): complete phase research"
+Confirm: "Committed: docs(${PHASE}): complete phase research" (or skipped if multi-repo)
 </step>
 
 </process>

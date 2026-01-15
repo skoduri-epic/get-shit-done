@@ -400,16 +400,20 @@ For multi-plan phases: each plan has focused scope, references previous plan sum
 </step>
 
 <step name="git_commit">
-Commit phase plan(s):
+Commit phase plan(s) (unless multi-repo mode):
 
 ```bash
-# Stage all PLAN.md files for this phase
-git add .planning/phases/${PHASE}-*/${PHASE}-*-PLAN.md
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping git commit (PLAN.md created in .planning/)"
+else
+    # Stage all PLAN.md files for this phase
+    git add .planning/phases/${PHASE}-*/${PHASE}-*-PLAN.md
 
-# Also stage DISCOVERY.md if it was created during mandatory_discovery
-git add .planning/phases/${PHASE}-*/DISCOVERY.md 2>/dev/null
+    # Also stage DISCOVERY.md if it was created during mandatory_discovery
+    git add .planning/phases/${PHASE}-*/DISCOVERY.md 2>/dev/null
 
-git commit -m "$(cat <<'EOF'
+    git commit -m "$(cat <<'EOF'
 docs(${PHASE}): create phase plan
 
 Phase ${PHASE}: ${PHASE_NAME}
@@ -418,9 +422,10 @@ Phase ${PHASE}: ${PHASE_NAME}
 - Ready for execution
 EOF
 )"
+fi
 ```
 
-Confirm: "Committed: docs(${PHASE}): create phase plan"
+Confirm: "Committed: docs(${PHASE}): create phase plan" (or skipped if multi-repo)
 </step>
 
 <step name="offer_next">

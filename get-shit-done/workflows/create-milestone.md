@@ -323,12 +323,16 @@ Resume file: None
 </step>
 
 <step name="git_commit">
-Commit milestone creation:
+Commit milestone creation (unless multi-repo mode):
 
 ```bash
-git add .planning/ROADMAP.md .planning/STATE.md
-git add .planning/phases/
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping git commit (milestone created in .planning/)"
+else
+    git add .planning/ROADMAP.md .planning/STATE.md
+    git add .planning/phases/
+    git commit -m "$(cat <<'EOF'
 docs: create milestone v[X.Y] [Name] ([N] phases)
 
 Phases:
@@ -337,9 +341,10 @@ Phases:
 - [N+2]. [name]: [goal]
 EOF
 )"
+fi
 ```
 
-Confirm: "Committed: docs: create milestone v[X.Y] [Name]"
+Confirm: "Committed: docs: create milestone v[X.Y] [Name]" (or skipped if multi-repo)
 </step>
 
 <step name="cleanup_context">

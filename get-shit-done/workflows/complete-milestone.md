@@ -527,18 +527,22 @@ git push origin v[X.Y]
 
 <step name="git_commit_milestone">
 
-Commit milestone completion including archive file.
+Commit milestone completion including archive file (unless multi-repo mode).
 
 ```bash
-# Stage all milestone-related files
-git add .planning/MILESTONES.md
-git add .planning/PROJECT.md
-git add .planning/ROADMAP.md
-git add .planning/STATE.md
-git add .planning/milestones/v[X.Y]-ROADMAP.md
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping git commit (milestone archive created in .planning/)"
+else
+    # Stage all milestone-related files
+    git add .planning/MILESTONES.md
+    git add .planning/PROJECT.md
+    git add .planning/ROADMAP.md
+    git add .planning/STATE.md
+    git add .planning/milestones/v[X.Y]-ROADMAP.md
 
-# Commit with descriptive message
-git commit -m "$(cat <<'EOF'
+    # Commit with descriptive message
+    git commit -m "$(cat <<'EOF'
 chore: complete v[X.Y] milestone
 
 - Added MILESTONES.md entry
@@ -549,9 +553,10 @@ chore: complete v[X.Y] milestone
 - Tagged v[X.Y]
 EOF
 )"
+fi
 ```
 
-Confirm: "Committed: chore: complete v[X.Y] milestone"
+Confirm: "Committed: chore: complete v[X.Y] milestone" (or skipped if multi-repo)
 
 </step>
 

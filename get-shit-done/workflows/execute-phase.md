@@ -16,12 +16,21 @@ Read STATE.md before any operation to load project context.
 MULTI_REPO="no"
 if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
     MULTI_REPO="yes"
-    echo "Multi-repo mode: git operations will be skipped"
+    echo "Multi-repo mode enabled"
 fi
 ```
 
-**If MULTI_REPO="yes":** All git add/commit operations in this workflow should be skipped.
-Tasks still execute normally, but code is not committed (individual repos handle their own git).
+**If MULTI_REPO="yes":** This project has separate git repos (e.g., backend/, frontend/).
+
+- **Task code commits**: STILL HAPPEN — commit to the appropriate sub-repo (backend/, frontend/)
+- **Planning metadata commits** (.planning/ files): SKIP — .planning is not a git repo
+
+When committing task code in multi-repo mode:
+1. Identify which repo the changed files belong to (e.g., `backend/src/...` → backend repo)
+2. Run git commands from within that repo directory
+3. Example: `cd backend && git add src/modules/... && git commit -m "feat(08-01): ..."`
+
+The user manages separate repos; Claude commits code changes to each repo as tasks are completed.
 </step>
 
 <step name="load_project_state" priority="first">
@@ -1301,7 +1310,24 @@ ROADMAP_FILE=".planning/ROADMAP.md"
   </step>
 
 <step name="git_commit_metadata">
-Commit execution metadata (SUMMARY + STATE + ROADMAP):
+Commit execution metadata (SUMMARY + STATE + ROADMAP) — **unless multi-repo mode**.
+
+**Multi-repo check:**
+
+```bash
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping metadata commit (.planning/ is not a git repo)"
+    echo "SUMMARY.md, STATE.md, ROADMAP.md updated locally but not committed"
+    # Skip to next step
+fi
+```
+
+**If multi-repo mode: SKIP this entire step.** The .planning/ files are updated locally but not committed since there's no git repo there.
+
+---
+
+**Standard mode (single repo) continues below:**
 
 **Note:** All task code has already been committed during execution (one commit per task).
 PLAN.md was already committed during plan-phase. This final commit captures execution results only.
@@ -1358,7 +1384,7 @@ EOF
 )"
 ```
 
-**Git log after plan execution:**
+**Git log after plan execution (standard mode):**
 
 ```
 abc123f docs(08-02): complete user registration plan
@@ -1404,9 +1430,16 @@ git diff --name-only ${FIRST_TASK}^..HEAD 2>/dev/null
 **Update format:**
 Make single targeted edits - add a bullet point, update a path, or remove a stale entry. Don't rewrite sections.
 
+**Commit codebase map changes (standard mode only):**
+
 ```bash
-git add .planning/codebase/*.md
-git commit --amend --no-edit  # Include in metadata commit
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: codebase map updated locally but not committed"
+else
+    git add .planning/codebase/*.md
+    git commit --amend --no-edit  # Include in metadata commit
+fi
 ```
 
 **If .planning/codebase/ doesn't exist:**

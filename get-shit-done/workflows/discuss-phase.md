@@ -216,11 +216,15 @@ Created: .planning/phases/${PHASE}-${SLUG}/${PHASE}-CONTEXT.md
 </step>
 
 <step name="git_commit">
-Commit phase context:
+Commit phase context (unless multi-repo mode):
 
 ```bash
-git add .planning/phases/${PHASE}-${SLUG}/${PHASE}-CONTEXT.md
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping git commit (CONTEXT.md created in .planning/)"
+else
+    git add .planning/phases/${PHASE}-${SLUG}/${PHASE}-CONTEXT.md
+    git commit -m "$(cat <<'EOF'
 docs(${PHASE}): capture phase context
 
 Phase ${PHASE}: ${PHASE_NAME}
@@ -229,9 +233,10 @@ Phase ${PHASE}: ${PHASE_NAME}
 - Scope boundaries defined
 EOF
 )"
+fi
 ```
 
-Confirm: "Committed: docs(${PHASE}): capture phase context"
+Confirm: "Committed: docs(${PHASE}): capture phase context" (or skipped if multi-repo)
 </step>
 
 </process>
@@ -242,6 +247,6 @@ Confirm: "Committed: docs(${PHASE}): capture phase context"
 - Vision gathered through collaborative thinking (not interrogation)
 - User's imagination captured: how it works, what's essential, what's out of scope
 - CONTEXT.md created in phase directory
-- CONTEXT.md committed to git
+- CONTEXT.md committed to git (unless multi-repo mode)
 - User knows next steps (typically: research or plan the phase)
 </success_criteria>
