@@ -391,11 +391,15 @@ Created: .planning/phases/${PADDED_PHASE}-${SLUG}/${PADDED_PHASE}-CONTEXT.md
 </step>
 
 <step name="git_commit">
-Commit phase context:
+Commit phase context (unless multi-repo mode):
 
 ```bash
-git add "${PHASE_DIR}/${PADDED_PHASE}-CONTEXT.md"
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping git commit (CONTEXT.md created in .planning/)"
+else
+    git add "${PHASE_DIR}/${PADDED_PHASE}-CONTEXT.md"
+    git commit -m "$(cat <<'EOF'
 docs(${PADDED_PHASE}): capture phase context
 
 Phase ${PADDED_PHASE}: ${PHASE_NAME}
@@ -403,9 +407,10 @@ Phase ${PADDED_PHASE}: ${PHASE_NAME}
 - Phase boundary established
 EOF
 )"
+fi
 ```
 
-Confirm: "Committed: docs(${PADDED_PHASE}): capture phase context"
+Confirm: "Committed: docs(${PADDED_PHASE}): capture phase context" (or skipped if multi-repo)
 </step>
 
 </process>
@@ -418,5 +423,6 @@ Confirm: "Committed: docs(${PADDED_PHASE}): capture phase context"
 - Scope creep redirected to deferred ideas
 - CONTEXT.md captures actual decisions, not vague vision
 - Deferred ideas preserved for future phases
+- CONTEXT.md committed to git (OR skipped if multiRepo: true)
 - User knows next steps
 </success_criteria>
