@@ -15,7 +15,10 @@
         "name": "TÂCHES (fork: skoduri-epic)",
         "email": "skoduri@epicintl.net"
       },
-      "source": ".",
+      "source": {
+        "source": "github",
+        "repo": "skoduri-epic/get-shit-done"
+      },
       "category": "development",
       "homepage": "https://github.com/skoduri-epic/get-shit-done"
     }
