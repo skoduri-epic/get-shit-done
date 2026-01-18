@@ -1,11 +1,23 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "get-shit-done",
   "description": "Get Shit Done - A meta-prompting, context engineering and spec-driven development system for Claude Code. This fork includes multi-repo workspace support.",
+  "owner": {
+    "name": "skoduri-epic",
+    "email": "skoduri@epicintl.net"
+  },
   "plugins": [
     {
       "name": "get-shit-done",
-      "description": "GSD workflow system with multi-repo support",
-      "path": "."
+      "description": "GSD workflow system with multi-repo support for solo agentic development",
+      "version": "1.6.4",
+      "author": {
+        "name": "TÂCHES (fork: skoduri-epic)",
+        "email": "skoduri@epicintl.net"
+      },
+      "source": ".",
+      "category": "development",
+      "homepage": "https://github.com/skoduri-epic/get-shit-done"
     }
   ]
 }
