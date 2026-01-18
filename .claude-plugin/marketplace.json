@@ -1,0 +1,11 @@
+{
+  "name": "get-shit-done",
+  "description": "Get Shit Done - A meta-prompting, context engineering and spec-driven development system for Claude Code. This fork includes multi-repo workspace support.",
+  "plugins": [
+    {
+      "name": "get-shit-done",
+      "description": "GSD workflow system with multi-repo support",
+      "path": "."
+    }
+  ]
+}
