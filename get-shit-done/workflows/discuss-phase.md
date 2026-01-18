@@ -395,7 +395,7 @@ Commit phase context (unless multi-repo mode):
 
 ```bash
 # Check if multi-repo mode is enabled
-if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
     echo "Multi-repo mode: skipping git commit (CONTEXT.md created in .planning/)"
 else
     git add "${PHASE_DIR}/${PADDED_PHASE}-CONTEXT.md"

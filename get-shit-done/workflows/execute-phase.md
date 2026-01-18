@@ -18,7 +18,7 @@ Read STATE.md before any operation to load project context.
 ```bash
 # Multi-repo check - store result for later git operations
 MULTI_REPO="no"
-if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
     MULTI_REPO="yes"
     echo "Multi-repo mode enabled"
 fi
@@ -485,7 +485,7 @@ Commit phase completion (roadmap, state, verification) — **unless multi-repo m
 
 ```bash
 # Check if multi-repo mode is enabled
-if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
     echo "Multi-repo mode: skipping metadata commit (.planning/ is not a git repo)"
     echo "ROADMAP.md, STATE.md updated locally but not committed"
 else
@@ -590,11 +590,11 @@ Make single targeted edits - add a bullet point, update a path, or remove a stal
 
 ```bash
 # Check if multi-repo mode is enabled
-if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
     echo "Multi-repo mode: codebase map updated locally but not committed"
 else
     git add .planning/codebase/*.md
-    git commit --amend --no-edit  # Include in metadata commit
+    git commit -m "docs: update codebase map after phase execution"
 fi
 ```
 

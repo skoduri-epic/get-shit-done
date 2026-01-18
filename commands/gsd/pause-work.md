@@ -90,9 +90,16 @@ Be specific enough for a fresh Claude to understand immediately.
 </step>
 
 <step name="commit">
+Commit the handoff file (skip in multi-repo mode):
+
 ```bash
-git add .planning/phases/*/.continue-here.md
-git commit -m "wip: [phase-name] paused at task [X]/[Y]"
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping commit (handoff file created in .planning/ locally)"
+else
+    git add .planning/phases/*/.continue-here.md
+    git commit -m "wip: [phase-name] paused at task [X]/[Y]"
+fi
 ```
 </step>
 

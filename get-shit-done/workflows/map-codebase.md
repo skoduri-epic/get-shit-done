@@ -213,7 +213,7 @@ Commit the codebase map (unless multi-repo mode):
 
 ```bash
 # Check for multi-repo mode
-if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
     echo "Multi-repo mode: skipping git commit (codebase map created in .planning/codebase/)"
 else
     git add .planning/codebase/*.md

@@ -190,16 +190,21 @@ Update Active requirements section with new goals (keep Validated section intact
 
 Update "Last updated" footer.
 
-**Commit PROJECT.md:**
+**Commit PROJECT.md:** (skip in multi-repo mode)
 
 ```bash
-git add .planning/PROJECT.md
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping PROJECT.md commit"
+else
+    git add .planning/PROJECT.md
+    git commit -m "$(cat <<'EOF'
 docs: start milestone v[X.Y] [Name]
 
 [One-liner describing milestone focus]
 EOF
 )"
+fi
 ```
 
 ## Phase 6: Research Decision
@@ -528,17 +533,22 @@ Does this capture what you're building? (yes / adjust)
 
 If "adjust": Return to scoping.
 
-**Commit requirements:**
+**Commit requirements:** (skip in multi-repo mode)
 
 ```bash
-git add .planning/REQUIREMENTS.md
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping REQUIREMENTS.md commit"
+else
+    git add .planning/REQUIREMENTS.md
+    git commit -m "$(cat <<'EOF'
 docs: define v[X.Y] requirements
 
 [X] requirements across [N] categories
 [Y] requirements deferred to v2
 EOF
 )"
+fi
 ```
 
 ## Phase 8: Create Roadmap
@@ -626,11 +636,15 @@ Use AskUserQuestion:
 - Re-spawn roadmapper with revision context
 - Loop until approved
 
-**Commit roadmap:**
+**Commit roadmap:** (skip in multi-repo mode)
 
 ```bash
-git add .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping roadmap commit"
+else
+    git add .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md
+    git commit -m "$(cat <<'EOF'
 docs: create v[X.Y] roadmap ([N] phases)
 
 Phases:
@@ -641,6 +655,7 @@ Phases:
 All v1 requirements mapped to phases.
 EOF
 )"
+fi
 ```
 
 ## Phase 9: Done

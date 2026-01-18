@@ -622,7 +622,7 @@ Commit milestone completion including archive files and deletions (unless multi-
 
 ```bash
 # Check if multi-repo mode is enabled
-if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
     echo "Multi-repo mode: skipping git commit (milestone archive created in .planning/)"
 else
     # Stage archive files (new)

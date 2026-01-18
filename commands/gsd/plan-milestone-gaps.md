@@ -156,11 +156,16 @@ Add new phases to current milestone:
 mkdir -p ".planning/phases/{NN}-{name}"
 ```
 
-## 8. Commit Roadmap Update
+## 8. Commit Roadmap Update (skip in multi-repo mode)
 
 ```bash
-git add .planning/ROADMAP.md
-git commit -m "docs(roadmap): add gap closure phases {N}-{M}"
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping commit (roadmap updated in .planning/ locally)"
+else
+    git add .planning/ROADMAP.md
+    git commit -m "docs(roadmap): add gap closure phases {N}-{M}"
+fi
 ```
 
 ## 9. Offer Next Steps

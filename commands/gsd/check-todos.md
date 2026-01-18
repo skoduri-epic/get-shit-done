@@ -175,21 +175,26 @@ Update STATE.md "### Pending Todos" section if exists.
 </step>
 
 <step name="git_commit">
-If todo was moved to done/, commit the change:
+If todo was moved to done/, commit the change (skip in multi-repo mode):
 
 ```bash
-git add .planning/todos/done/[filename]
-git rm --cached .planning/todos/pending/[filename] 2>/dev/null || true
-[ -f .planning/STATE.md ] && git add .planning/STATE.md
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping commit (todo moved in .planning/ locally)"
+else
+    git add .planning/todos/done/[filename]
+    git rm --cached .planning/todos/pending/[filename] 2>/dev/null || true
+    [ -f .planning/STATE.md ] && git add .planning/STATE.md
+    git commit -m "$(cat <<'EOF'
 docs: start work on todo - [title]
 
 Moved to done/, beginning implementation.
 EOF
 )"
+fi
 ```
 
-Confirm: "Committed: docs: start work on todo - [title]"
+Confirm: "Committed: docs: start work on todo - [title]" (or skipped if multi-repo)
 </step>
 
 </process>

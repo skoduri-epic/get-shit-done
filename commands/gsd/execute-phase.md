@@ -71,9 +71,14 @@ Phase: $ARGUMENTS
    git status --porcelain
    ```
 
-   **If changes exist:** Orchestrator made corrections between executor completions. Commit them:
+   **If changes exist:** Orchestrator made corrections between executor completions. Commit them (unless multi-repo mode):
    ```bash
-   git add -u && git commit -m "fix({phase}): orchestrator corrections"
+   # Check if multi-repo mode is enabled
+   if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+       echo "Multi-repo mode: skipping orchestrator corrections commit"
+   else
+       git add -u && git commit -m "fix({phase}): orchestrator corrections"
+   fi
    ```
 
    **If clean:** Continue to verification.
@@ -98,11 +103,18 @@ Phase: $ARGUMENTS
    - Write updated REQUIREMENTS.md
    - Skip if: REQUIREMENTS.md doesn't exist, or phase has no Requirements line
 
-10. **Commit phase completion**
+10. **Commit phase completion** (skip in multi-repo mode)
     Bundle all phase metadata updates in one commit:
-    - Stage: `git add .planning/ROADMAP.md .planning/STATE.md`
-    - Stage REQUIREMENTS.md if updated: `git add .planning/REQUIREMENTS.md`
-    - Commit: `docs({phase}): complete {phase-name} phase`
+    ```bash
+    # Check if multi-repo mode is enabled
+    if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+        echo "Multi-repo mode: skipping phase completion commit (metadata updated locally)"
+    else
+        git add .planning/ROADMAP.md .planning/STATE.md
+        [ -f .planning/REQUIREMENTS.md ] && git add .planning/REQUIREMENTS.md
+        git commit -m "docs({phase}): complete {phase-name} phase"
+    fi
+    ```
 
 11. **Offer next steps**
     - Route to next action (see `<offer_next>`)

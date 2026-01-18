@@ -52,7 +52,7 @@ This is the most leveraged moment in any project. Deep questioning here means be
    # Check for multi-repo config (skip git init entirely)
    MULTI_REPO="no"
    if [ -f .planning/config.json ]; then
-       MULTI_REPO=$(grep -q '"multiRepo":\s*true' .planning/config.json && echo "yes" || echo "no")
+       MULTI_REPO=$(grep -q '"multiRepo":[[:space:]]*true' .planning/config.json && echo "yes" || echo "no")
    fi
 
    if [ "$MULTI_REPO" = "yes" ]; then
@@ -254,7 +254,7 @@ Do not compress. Capture everything gathered.
 ```bash
 mkdir -p .planning
 # Check if multi-repo mode
-if [ -f .planning/config.json ] && grep -q '"multiRepo":\s*true' .planning/config.json; then
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
     echo "Multi-repo mode: skipping git commit (files created in .planning/)"
 else
     git add .planning/PROJECT.md .planning/config.json

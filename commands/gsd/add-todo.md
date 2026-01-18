@@ -124,20 +124,25 @@ If `.planning/STATE.md` exists:
 </step>
 
 <step name="git_commit">
-Commit the todo and any updated state:
+Commit the todo and any updated state (skip in multi-repo mode):
 
 ```bash
-git add .planning/todos/pending/[filename]
-[ -f .planning/STATE.md ] && git add .planning/STATE.md
-git commit -m "$(cat <<'EOF'
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping commit (todo created in .planning/ locally)"
+else
+    git add .planning/todos/pending/[filename]
+    [ -f .planning/STATE.md ] && git add .planning/STATE.md
+    git commit -m "$(cat <<'EOF'
 docs: capture todo - [title]
 
 Area: [area]
 EOF
 )"
+fi
 ```
 
-Confirm: "Committed: docs: capture todo - [title]"
+Confirm: "Committed: docs: capture todo - [title]" (or skipped if multi-repo)
 </step>
 
 <step name="confirm">

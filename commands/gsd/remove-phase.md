@@ -250,11 +250,16 @@ Update any internal references to reflect new numbering.
 </step>
 
 <step name="commit">
-Stage and commit the removal:
+Stage and commit the removal (skip in multi-repo mode):
 
 ```bash
-git add .planning/
-git commit -m "chore: remove phase {target} ({original-phase-name})"
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping commit (phase removal recorded in .planning/ locally)"
+else
+    git add .planning/
+    git commit -m "chore: remove phase {target} ({original-phase-name})"
+fi
 ```
 
 The commit message preserves the historical record of what was removed.
