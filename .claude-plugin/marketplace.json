@@ -16,8 +16,8 @@
         "email": "skoduri@epicintl.net"
       },
       "source": {
-        "source": "github",
-        "repo": "skoduri-epic/get-shit-done"
+        "source": "url",
+        "url": "https://github.com/skoduri-epic/get-shit-done.git"
       },
       "category": "development",
       "homepage": "https://github.com/skoduri-epic/get-shit-done"
