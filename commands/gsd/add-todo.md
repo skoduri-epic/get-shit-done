@@ -124,13 +124,15 @@ If `.planning/STATE.md` exists:
 </step>
 
 <step name="git_commit">
-Commit the todo and any updated state (skip in multi-repo mode):
+**IMPORTANT: Check multi-repo mode FIRST before any git operations.**
 
 ```bash
-# Check if multi-repo mode is enabled
+# Check if multi-repo mode is enabled - MUST run this check
 if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
-    echo "Multi-repo mode: skipping commit (todo created in .planning/ locally)"
+    echo "Multi-repo mode detected: skipping git commit (.planning/ is local-only)"
+    # DO NOT run git add or git commit in multi-repo mode
 else
+    # Only commit in single-repo mode
     git add .planning/todos/pending/[filename]
     [ -f .planning/STATE.md ] && git add .planning/STATE.md
     git commit -m "$(cat <<'EOF'
@@ -139,10 +141,13 @@ docs: capture todo - [title]
 Area: [area]
 EOF
 )"
+    echo "Committed: docs: capture todo - [title]"
 fi
 ```
 
-Confirm: "Committed: docs: capture todo - [title]" (or skipped if multi-repo)
+**Output:**
+- Multi-repo mode: "Multi-repo mode detected: skipping git commit"
+- Single-repo mode: "Committed: docs: capture todo - [title]"
 </step>
 
 <step name="confirm">
@@ -183,5 +188,5 @@ Would you like to:
 - [ ] No duplicates (checked and resolved)
 - [ ] Area consistent with existing todos
 - [ ] STATE.md updated if exists
-- [ ] Todo and state committed to git
+- [ ] Multi-repo check executed (commit skipped if multiRepo: true)
 </success_criteria>

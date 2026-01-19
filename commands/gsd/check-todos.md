@@ -175,13 +175,17 @@ Update STATE.md "### Pending Todos" section if exists.
 </step>
 
 <step name="git_commit">
-If todo was moved to done/, commit the change (skip in multi-repo mode):
+**IMPORTANT: Check multi-repo mode FIRST before any git operations.**
+
+If todo was moved to done/:
 
 ```bash
-# Check if multi-repo mode is enabled
+# Check if multi-repo mode is enabled - MUST run this check
 if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
-    echo "Multi-repo mode: skipping commit (todo moved in .planning/ locally)"
+    echo "Multi-repo mode detected: skipping git commit (.planning/ is local-only)"
+    # DO NOT run git add or git commit in multi-repo mode
 else
+    # Only commit in single-repo mode
     git add .planning/todos/done/[filename]
     git rm --cached .planning/todos/pending/[filename] 2>/dev/null || true
     [ -f .planning/STATE.md ] && git add .planning/STATE.md
@@ -191,10 +195,13 @@ docs: start work on todo - [title]
 Moved to done/, beginning implementation.
 EOF
 )"
+    echo "Committed: docs: start work on todo - [title]"
 fi
 ```
 
-Confirm: "Committed: docs: start work on todo - [title]" (or skipped if multi-repo)
+**Output:**
+- Multi-repo mode: "Multi-repo mode detected: skipping git commit"
+- Single-repo mode: "Committed: docs: start work on todo - [title]"
 </step>
 
 </process>
@@ -218,5 +225,5 @@ Confirm: "Committed: docs: start work on todo - [title]" (or skipped if multi-re
 - [ ] Appropriate actions offered
 - [ ] Selected action executed
 - [ ] STATE.md updated if todo count changed
-- [ ] Changes committed to git (if todo moved to done/)
+- [ ] Multi-repo check executed (commit skipped if multiRepo: true)
 </success_criteria>
