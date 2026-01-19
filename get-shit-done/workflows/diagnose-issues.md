@@ -156,10 +156,15 @@ For each gap in the Gaps section, add artifacts and missing fields:
 
 Update status in frontmatter to "diagnosed".
 
-Commit the updated UAT.md:
+Commit the updated UAT.md (skip in multi-repo mode):
 ```bash
-git add ".planning/phases/XX-name/{phase}-UAT.md"
-git commit -m "docs({phase}): add root causes from diagnosis"
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping diagnosis commit (.planning/ is not a git repo)"
+else
+    git add ".planning/phases/XX-name/{phase}-UAT.md"
+    git commit -m "docs({phase}): add root causes from diagnosis"
+fi
 ```
 </step>
 

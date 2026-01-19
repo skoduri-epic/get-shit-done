@@ -285,10 +285,15 @@ Clear Current Test section:
 [testing complete]
 ```
 
-Commit the UAT file:
+Commit the UAT file (skip in multi-repo mode):
 ```bash
-git add ".planning/phases/XX-name/{phase}-UAT.md"
-git commit -m "test({phase}): complete UAT - {passed} passed, {issues} issues"
+# Check if multi-repo mode is enabled
+if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
+    echo "Multi-repo mode: skipping UAT commit (.planning/ is not a git repo)"
+else
+    git add ".planning/phases/XX-name/{phase}-UAT.md"
+    git commit -m "test({phase}): complete UAT - {passed} passed, {issues} issues"
+fi
 ```
 
 Present summary:
