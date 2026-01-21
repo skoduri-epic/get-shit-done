@@ -5,8 +5,8 @@
 This is a fork of [glittercowboy/get-shit-done](https://github.com/glittercowboy/get-shit-done) with **multi-repo workspace support**.
 
 **Fork:** https://github.com/skoduri-epic/get-shit-done
-**Base Version:** 1.9.1
-**Fork Version:** 1.9.1-multirepo
+**Base Version:** 1.9.4
+**Fork Version:** 1.9.4-multirepo
 
 ## Multi-Repo Support
 
