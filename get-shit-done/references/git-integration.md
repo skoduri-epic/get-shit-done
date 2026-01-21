@@ -35,37 +35,67 @@ The git log should read like a changelog of what shipped, not a diary of plannin
 This mode is for workspaces with separate git repos per service (e.g., backend/, frontend/, infrastructure/).
 </git_check>
 
-<multi_repo_support>
+<sub_repos_support>
 
-## Multi-Repo Mode
+## Sub-Repos Mode
 
-For projects with multiple separate git repositories (not a monorepo), set `multiRepo: true` in config.json.
-
-**When enabled:**
-- `/gsd:new-project` will NOT run `git init`
-- All commit steps are skipped
-- Planning files are created in `.planning/` but never committed
-- The `.planning/` folder acts as cross-repo coordination
-
-**When to use:**
-- Workspace root containing separate service repos (backend/, frontend/, etc.)
-- Each service has its own git history and deployment
-- `.planning/` folder is intentionally untracked
-
-**Detection:**
-GSD will auto-detect multi-repo projects by looking for `.git` folders in subdirectories.
-It will prompt to choose between monorepo and multi-repo mode.
+For workspaces with multiple separate git repositories (not a monorepo), configure `sub_repos` in config.json.
 
 **Config example:**
 ```json
 {
-  "mode": "interactive",
-  "multiRepo": true,
-  "skipGitInit": true
+  "planning": {
+    "commit_docs": false,
+    "sub_repos": ["backend", "frontend", "shared", "mobile"]
+  }
 }
 ```
 
-</multi_repo_support>
+The `sub_repos` array lists directory names that are separate git repos. These names should match your actual directory structure.
+
+**When enabled:**
+- `/gsd:new-project` will NOT run `git init` at workspace root
+- Planning docs are never committed (`commit_docs: false`)
+- Code commits are routed to respective sub-repos based on file paths
+- The `.planning/` folder acts as cross-repo coordination (local only)
+
+**How code commits work:**
+
+1. After a task completes, modified files are grouped by sub-repo prefix
+2. Files in `backend/src/api/users.ts` → commit to `backend/` repo
+3. Files in `frontend/src/components/Header.tsx` → commit to `frontend/` repo
+4. Each sub-repo gets its own atomic commit with the same message format
+
+**Example workflow:**
+```
+Task modifies:
+  - backend/src/api/users.ts
+  - backend/src/types/User.ts
+  - frontend/src/hooks/useUsers.ts
+
+Results in:
+  - Commit in backend/: feat(04-01): add user API endpoint
+  - Commit in frontend/: feat(04-01): add user hooks
+```
+
+**When to use:**
+- Workspace root containing separate service repos
+- Each service has its own git history and deployment
+- Teams may work on different repos independently
+- `.planning/` folder is intentionally untracked
+
+**Detection:**
+GSD can auto-detect multi-repo projects by looking for `.git` folders in subdirectories.
+It will prompt to configure `sub_repos` during project initialization.
+
+**Files not matching any sub-repo:**
+If modified files don't match any configured sub-repo prefix, a warning is shown:
+```
+Warning: File 'scripts/deploy.sh' doesn't match any sub-repo
+```
+These files need manual handling or the sub_repos config needs updating.
+
+</sub_repos_support>
 
 <commit_formats>
 

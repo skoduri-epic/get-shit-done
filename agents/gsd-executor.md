@@ -39,6 +39,32 @@ Options:
 ```
 
 **If .planning/ doesn't exist:** Error - project not initialized.
+
+**Load planning config:**
+
+```bash
+# Check if planning docs should be committed (default: true)
+COMMIT_PLANNING_DOCS=$(cat .planning/config.json 2>/dev/null | grep -o '"commit_docs"[[:space:]]*:[[:space:]]*[^,}]*' | grep -o 'true\|false' || echo "true")
+# Auto-detect gitignored (overrides config)
+git check-ignore -q .planning 2>/dev/null && COMMIT_PLANNING_DOCS=false
+```
+
+Store `COMMIT_PLANNING_DOCS` for use in git operations.
+</step>
+
+<step name="load_codebase_intelligence">
+Check for codebase intelligence:
+
+```bash
+cat .planning/intel/summary.md 2>/dev/null
+```
+
+If exists:
+- Follow detected naming conventions when writing code
+- Place new files in directories that match their purpose
+- Use established patterns (camelCase, PascalCase, etc.)
+
+This context helps maintain codebase consistency during execution.
 </step>
 
 <step name="load_plan">
@@ -522,6 +548,19 @@ When executing a task with `tdd="true"` attribute, follow RED-GREEN-REFACTOR cyc
 <task_commit_protocol>
 After each task completes (verification passed, done criteria met), commit immediately.
 
+**0. Check for sub_repos mode:**
+
+```bash
+# Parse sub_repos array from config.json
+SUB_REPOS=$(cat .planning/config.json 2>/dev/null | \
+  grep -o '"sub_repos"[[:space:]]*:[[:space:]]*\[[^]]*\]' | \
+  grep -oE '"[^"]+"|[^][,[:space:]]+' | \
+  grep -v 'sub_repos' | tr -d '"' | tr '\n' ' ')
+```
+
+If `SUB_REPOS` is not empty, files must be committed to their respective sub-repos.
+See `<sub_repos_commit_flow>` in execute-plan.md for full routing logic.
+
 **1. Identify modified files:**
 
 ```bash
@@ -529,11 +568,27 @@ git status --short
 ```
 
 **2. Stage only task-related files:**
-Stage each file individually (NEVER use `git add .` or `git add -A`):
+
+**Standard mode:** Stage each file individually (NEVER use `git add .` or `git add -A`):
 
 ```bash
 git add src/api/auth.ts
 git add src/types/user.ts
+```
+
+**Sub-repos mode:** Group files by sub-repo prefix and commit to each:
+
+```bash
+# For files in each configured sub-repo
+for REPO in $SUB_REPOS; do
+  REPO_FILES=$(echo "$MODIFIED" | grep "^${REPO}/" | sed "s|^${REPO}/||")
+  if [ -n "$REPO_FILES" ]; then
+    cd "$REPO"
+    for FILE in $REPO_FILES; do git add "$FILE"; done
+    git commit -m "{type}({phase}-{plan}): {description}"
+    cd ..
+  fi
+done
 ```
 
 **3. Determine commit type:**
@@ -691,6 +746,10 @@ Resume file: [path to .continue-here if exists, else "None"]
 
 <final_commit>
 After SUMMARY.md and STATE.md updates:
+
+**If `COMMIT_PLANNING_DOCS=false`:** Skip git operations for planning files, log "Skipping planning docs commit (commit_docs: false)"
+
+**If `COMMIT_PLANNING_DOCS=true` (default):**
 
 **1. Stage execution artifacts:**
 

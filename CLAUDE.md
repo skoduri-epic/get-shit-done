@@ -5,55 +5,72 @@
 This is a fork of [glittercowboy/get-shit-done](https://github.com/glittercowboy/get-shit-done) with **multi-repo workspace support**.
 
 **Fork:** https://github.com/skoduri-epic/get-shit-done
-**Base Version:** 1.6.4
-**Fork Version:** 1.6.4-multirepo
+**Base Version:** 1.9.1
+**Fork Version:** 1.9.1-multirepo
 
-## Multi-Repo Modifications
+## Multi-Repo Support
 
-When `multiRepo: true` is set in `.planning/config.json`:
+When working with a multi-repo workspace (separate git repos for backend, frontend, etc.), configure `sub_repos` in `.planning/config.json`:
 
-- `/gsd:new-project` will NOT run `git init`
-- All commits to `.planning/` files are skipped
-- Planning files are created locally but never committed
-- Code commits in sub-repos (backend/, frontend/) still work normally
-- The `.planning/` folder acts as cross-repo coordination
+```json
+{
+  "planning": {
+    "commit_docs": false,
+    "sub_repos": ["backend", "frontend", "shared"]
+  }
+}
+```
+
+### How It Works
+
+1. **During `/gsd:new-project`:**
+   - GSD auto-detects directories with their own `.git` folders
+   - Prompts you to select which directories should receive code commits
+   - Automatically sets `commit_docs: false` (planning stays local)
+
+2. **During code execution:**
+   - Files are grouped by their sub-repo prefix
+   - `backend/src/api/users.ts` → commits to `backend/` repo
+   - `frontend/src/components/Header.tsx` → commits to `frontend/` repo
+   - Each sub-repo gets atomic commits with the same message format
+
+3. **Planning docs:**
+   - `.planning/` folder stays local (not committed)
+   - Acts as cross-repo coordination
+
+### Config Example
+
+```json
+{
+  "mode": "interactive",
+  "planning": {
+    "commit_docs": false,
+    "sub_repos": ["backend", "frontend", "mobile", "shared"]
+  },
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true
+  }
+}
+```
 
 ### Files Modified for Multi-Repo Support
 
 **Commands (`commands/gsd/`):**
-- `new-project.md` - Multi-repo detection + conditional git init
-- `execute-phase.md` - Conditional commits for orchestrator/phase completion
-- `new-milestone.md` - Conditional commits for PROJECT/REQUIREMENTS/ROADMAP
-- `remove-phase.md` - Conditional commit for phase removal
-- `pause-work.md` - Conditional commit for handoff files
-- `plan-milestone-gaps.md` - Conditional commit for roadmap updates
-- `add-todo.md` - Conditional commit for todo creation
-- `check-todos.md` - Conditional commit for todo status changes
+- `new-project.md` - Sub-repo detection + configuration prompt
 
 **Workflows (`get-shit-done/workflows/`):**
-- `complete-milestone.md` - Conditional milestone archive commit
-- `discuss-phase.md` - Conditional CONTEXT.md commit
-- `execute-phase.md` - Conditional metadata commits + codebase map updates
-- `map-codebase.md` - Conditional codebase map commit
+- `execute-plan.md` - Added `<sub_repos_commit_flow>` section
+
+**Agents (`agents/`):**
+- `gsd-executor.md` - Added sub_repos handling in task_commit_protocol
 
 **Templates:**
-- `get-shit-done/templates/config.json` - Added `multiRepo: false` default
+- `get-shit-done/templates/config.json` - Added `sub_repos: []` in planning section
 
 **References:**
-- `get-shit-done/references/git-integration.md` - Documented multi-repo mode
-
-### Key Pattern
-
-All multi-repo checks use macOS-compatible regex:
-```bash
-if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
-    echo "Multi-repo mode: skipping git commit"
-else
-    # normal git operations
-fi
-```
-
-Note: Uses `[[:space:]]*` instead of `\s*` for BSD grep (macOS) compatibility.
+- `get-shit-done/references/git-integration.md` - Documented sub_repos mode
 
 ## Installation
 
@@ -81,7 +98,7 @@ git merge upstream/main
 
 # 4. Resolve any conflicts
 # - Multi-repo changes are in specific files listed above
-# - Keep the conditional git checks when resolving conflicts
+# - Keep the sub_repos logic when resolving conflicts
 # - Update version in package.json: "1.X.Y-multirepo"
 
 # 5. Push to your fork
@@ -107,10 +124,10 @@ https://github.com/glittercowboy/get-shit-done/blob/main/CHANGELOG.md
 
 ### Version Naming Convention
 
-- Upstream: `1.6.4`
-- Fork: `1.6.4-multirepo`
+- Upstream: `1.9.1`
+- Fork: `1.9.1-multirepo`
 
-When merging upstream `1.7.0`, update to `1.7.0-multirepo`.
+When merging upstream `1.10.0`, update to `1.10.0-multirepo`.
 
 ## Troubleshooting
 
@@ -128,10 +145,10 @@ Restart Claude Code to reload commands from `~/.claude/commands/gsd/`.
 
 ### Merge Conflicts During Update
 
-The multi-repo modifications touch specific sections (git commit blocks). When resolving:
-1. Keep the `if [ -f .planning/config.json ] && grep -q '"multiRepo"...` pattern
-2. Update the git commands inside the `else` block to match upstream
-3. Ensure the `fi` closing bracket is present
+The multi-repo modifications are in the `<sub_repos_commit_flow>` section of execute-plan.md and similar places. When resolving:
+1. Keep the sub_repos parsing and commit routing logic
+2. Update any changed upstream patterns around it
+3. Ensure the config.json template includes `sub_repos: []`
 
 ### Verify Installation
 
@@ -141,8 +158,6 @@ cat ~/.claude/get-shit-done/VERSION
 
 # Check commands installed
 ls ~/.claude/commands/gsd/ | wc -l
-
-# Should show 24 commands
 ```
 
 ## Git Remotes Setup

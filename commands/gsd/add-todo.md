@@ -126,6 +126,17 @@ If `.planning/STATE.md` exists:
 <step name="git_commit">
 **IMPORTANT: Check multi-repo mode FIRST before any git operations.**
 
+**Check planning config:**
+
+```bash
+COMMIT_PLANNING_DOCS=$(cat .planning/config.json 2>/dev/null | grep -o '"commit_docs"[[:space:]]*:[[:space:]]*[^,}]*' | grep -o 'true\|false' || echo "true")
+git check-ignore -q .planning 2>/dev/null && COMMIT_PLANNING_DOCS=false
+```
+
+**If `COMMIT_PLANNING_DOCS=false`:** Skip git operations, log "Todo saved (not committed - commit_docs: false)"
+
+**If `COMMIT_PLANNING_DOCS=true` (default):**
+
 ```bash
 # Check if multi-repo mode is enabled - MUST run this check
 if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then

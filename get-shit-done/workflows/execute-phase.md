@@ -8,36 +8,32 @@ The orchestrator's job is coordination, not execution. Each subagent loads the f
 
 <required_reading>
 Read STATE.md before any operation to load project context.
+Read config.json for planning behavior settings.
 </required_reading>
 
 <process>
 
-<step name="check_multi_repo" priority="first">
-**Check if multi-repo mode is enabled:**
+<step name="resolve_model_profile" priority="first">
+Read model profile for agent spawning:
 
 ```bash
-# Multi-repo check - store result for later git operations
-MULTI_REPO="no"
-if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
-    MULTI_REPO="yes"
-    echo "Multi-repo mode enabled"
-fi
+MODEL_PROFILE=$(cat .planning/config.json 2>/dev/null | grep -o '"model_profile"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"' || echo "balanced")
 ```
 
-**If MULTI_REPO="yes":** This project has separate git repos (e.g., backend/, frontend/).
+Default to "balanced" if not set.
 
-- **Task code commits**: STILL HAPPEN — commit to the appropriate sub-repo (backend/, frontend/)
-- **Planning metadata commits** (.planning/ files): SKIP — .planning is not a git repo
+**Model lookup table:**
 
-When committing task code in multi-repo mode:
-1. Identify which repo the changed files belong to (e.g., `backend/src/...` → backend repo)
-2. Run git commands from within that repo directory
-3. Example: `cd backend && git add src/modules/... && git commit -m "feat(08-01): ..."`
+| Agent | quality | balanced | budget |
+|-------|---------|----------|--------|
+| gsd-executor | opus | sonnet | sonnet |
+| gsd-verifier | sonnet | sonnet | haiku |
+| general-purpose | — | — | — |
 
-The user manages separate repos; Claude commits code changes to each repo as tasks are completed.
+Store resolved models for use in Task calls below.
 </step>
 
-<step name="load_project_state" priority="first">
+<step name="load_project_state">
 Before any operation, read project state:
 
 ```bash
@@ -58,6 +54,17 @@ Options:
 ```
 
 **If .planning/ doesn't exist:** Error - project not initialized.
+
+**Load planning config:**
+
+```bash
+# Check if planning docs should be committed (default: true)
+COMMIT_PLANNING_DOCS=$(cat .planning/config.json 2>/dev/null | grep -o '"commit_docs"[[:space:]]*:[[:space:]]*[^,}]*' | grep -o 'true\|false' || echo "true")
+# Auto-detect gitignored (overrides config)
+git check-ignore -q .planning 2>/dev/null && COMMIT_PLANNING_DOCS=false
+```
+
+Store `COMMIT_PLANNING_DOCS` for use in git operations.
 </step>
 
 <step name="validate_phase">
@@ -183,9 +190,18 @@ Execute each wave in sequence. Autonomous plans within a wave run in parallel.
    - Bad: "Executing terrain generation plan"
    - Good: "Procedural terrain generator using Perlin noise — creates height maps, biome zones, and collision meshes. Required before vehicle physics can interact with ground."
 
-2. **Spawn all autonomous agents in wave simultaneously:**
+2. **Read files and spawn all autonomous agents in wave simultaneously:**
 
-   Use Task tool with multiple parallel calls. Each agent gets prompt from subagent-task-prompt template:
+   Before spawning, read file contents. The `@` syntax does not work across Task() boundaries - content must be inlined.
+
+   ```bash
+   # Read each plan in the wave
+   PLAN_CONTENT=$(cat "{plan_path}")
+   STATE_CONTENT=$(cat .planning/STATE.md)
+   CONFIG_CONTENT=$(cat .planning/config.json 2>/dev/null)
+   ```
+
+   Use Task tool with multiple parallel calls. Each agent gets prompt with inlined content:
 
    ```
    <objective>
@@ -202,9 +218,14 @@ Execute each wave in sequence. Autonomous plans within a wave run in parallel.
    </execution_context>
 
    <context>
-   Plan: @{plan_path}
-   Project state: @.planning/STATE.md
-   Config: @.planning/config.json (if exists)
+   Plan:
+   {plan_content}
+
+   Project state:
+   {state_content}
+
+   Config (if exists):
+   {config_content}
    </context>
 
    <success_criteria>
@@ -273,7 +294,7 @@ Plans with `autonomous: false` require user interaction.
 
 1. **Spawn agent for checkpoint plan:**
    ```
-   Task(prompt="{subagent-task-prompt}", subagent_type="general-purpose")
+   Task(prompt="{subagent-task-prompt}", subagent_type="gsd-executor", model="{executor_model}")
    ```
 
 2. **Agent runs until checkpoint:**
@@ -312,7 +333,8 @@ Plans with `autonomous: false` require user interaction.
    ```
    Task(
      prompt=filled_continuation_template,
-     subagent_type="general-purpose"
+     subagent_type="gsd-executor",
+     model="{executor_model}"
    )
    ```
 
@@ -388,7 +410,8 @@ Phase goal: {goal from ROADMAP.md}
 
 Check must_haves against actual codebase. Create VERIFICATION.md.
 Verify what actually exists in the code.",
-  subagent_type="gsd-verifier"
+  subagent_type="gsd-verifier",
+  model="{verifier_model}"
 )
 ```
 
@@ -481,164 +504,23 @@ Update ROADMAP.md to reflect phase completion:
 # Update status
 ```
 
-Commit phase completion (roadmap, state, verification) — **unless multi-repo mode**:
+**Check planning config:**
 
-```bash
-# Check if multi-repo mode is enabled
-if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
-    echo "Multi-repo mode: skipping metadata commit (.planning/ is not a git repo)"
-    echo "ROADMAP.md, STATE.md updated locally but not committed"
-else
-    git add .planning/ROADMAP.md .planning/STATE.md .planning/phases/{phase_dir}/*-VERIFICATION.md
-    git add .planning/REQUIREMENTS.md  # if updated
-    git commit -m "docs(phase-{X}): complete phase execution"
-fi
-```
-
-**2. Stage roadmap file:**
-
-```bash
-git add .planning/ROADMAP.md
-```
-
-**3. Verify staging:**
-
-```bash
-git status
-# Should show only execution artifacts (SUMMARY, STATE, ROADMAP), no code files
-```
-
-**4. Commit metadata:**
-
-```bash
-git commit -m "$(cat <<'EOF'
-docs({phase}-{plan}): complete [plan-name] plan
-
-Tasks completed: [N]/[N]
-- [Task 1 name]
-- [Task 2 name]
-- [Task 3 name]
-
-SUMMARY: .planning/phases/XX-name/{phase}-{plan}-SUMMARY.md
-EOF
-)"
-```
-
-**Example:**
-
-```bash
-git commit -m "$(cat <<'EOF'
-docs(08-02): complete user registration plan
-
-Tasks completed: 3/3
-- User registration endpoint
-- Password hashing with bcrypt
-- Email confirmation flow
-
-SUMMARY: .planning/phases/08-user-auth/08-02-registration-SUMMARY.md
-EOF
-)"
-```
-
-**Git log after plan execution (standard mode):**
-
-```
-abc123f docs(08-02): complete user registration plan
-def456g feat(08-02): add email confirmation flow
-hij789k feat(08-02): implement password hashing with bcrypt
-lmn012o feat(08-02): create user registration endpoint
-```
-
-Each task has its own commit, followed by one metadata commit documenting plan completion.
-
-For commit message conventions, see ~/.claude/get-shit-done/references/git-integration.md
-</step>
-
-<step name="update_codebase_map">
-**If .planning/codebase/ exists:**
-
-Check what changed across all task commits in this plan:
-
-```bash
-# Find first task commit (right after previous plan's docs commit)
-FIRST_TASK=$(git log --oneline --grep="feat({phase}-{plan}):" --grep="fix({phase}-{plan}):" --grep="test({phase}-{plan}):" --reverse | head -1 | cut -d' ' -f1)
-
-# Get all changes from first task through now
-git diff --name-only ${FIRST_TASK}^..HEAD 2>/dev/null
-```
-
-**Update only if structural changes occurred:**
-
-| Change Detected | Update Action |
-|-----------------|---------------|
-| New directory in src/ | STRUCTURE.md: Add to directory layout |
-| package.json deps changed | STACK.md: Add/remove from dependencies list |
-| New file pattern (e.g., first .test.ts) | CONVENTIONS.md: Note new pattern |
-| New external API client | INTEGRATIONS.md: Add service entry with file path |
-| Config file added/changed | STACK.md: Update configuration section |
-| File renamed/moved | Update paths in relevant docs |
-
-**Skip update if only:**
-- Code changes within existing files
-- Bug fixes
-- Content changes (no structural impact)
-
-**Update format:**
-Make single targeted edits - add a bullet point, update a path, or remove a stale entry. Don't rewrite sections.
-
-**Commit codebase map changes (standard mode only):**
-
-```bash
-# Check if multi-repo mode is enabled
-if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
-    echo "Multi-repo mode: codebase map updated locally but not committed"
-else
-    git add .planning/codebase/*.md
-    git commit -m "docs: update codebase map after phase execution"
-fi
-```
-
-**If .planning/codebase/ doesn't exist:**
-Skip this step.
-</step>
-
-<step name="check_phase_issues">
-**Check if issues were created during this phase:**
-
-```bash
-# Check if ISSUES.md exists and has issues from current phase
-if [ -f .planning/ISSUES.md ]; then
-  grep -E "Phase ${PHASE}.*Task" .planning/ISSUES.md | grep -v "^#" || echo "NO_ISSUES_THIS_PHASE"
-fi
-```
-
-**If issues were created during this phase:**
-
-```
-📋 Issues logged during this phase:
-- ISS-XXX: [brief description]
-- ISS-YYY: [brief description]
-
-Review these now?
-```
-
-Use AskUserQuestion:
-- header: "Phase Issues"
-- question: "[N] issues were logged during this phase. Review now?"
-- options:
-  - "Review issues" - Analyze with /gsd:consider-issues
-  - "Continue" - Address later, proceed to next work
-
-**If "Review issues" selected:**
-- Invoke: `SlashCommand("/gsd:consider-issues")`
-- After consider-issues completes, return to offer_next
-
-**If "Continue" selected or no issues found:**
+If `COMMIT_PLANNING_DOCS=false` (set in load_project_state):
+- Skip all git operations for .planning/ files
+- Planning docs exist locally but are gitignored
+- Log: "Skipping planning docs commit (commit_docs: false)"
 - Proceed to offer_next step
 
-**In YOLO mode:**
-- Note issues were logged but don't prompt: `📋 [N] issues logged this phase (review later with /gsd:consider-issues)`
-- Continue to offer_next automatically
+If `COMMIT_PLANNING_DOCS=true` (default):
+- Continue with git operations below
+
+Commit phase completion (roadmap, state, verification):
+```bash
+git add .planning/ROADMAP.md .planning/STATE.md .planning/phases/{phase_dir}/*-VERIFICATION.md
+git add .planning/REQUIREMENTS.md  # if updated
+git commit -m "docs(phase-{X}): complete phase execution"
+```
 </step>
 
 <step name="offer_next">

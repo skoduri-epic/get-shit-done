@@ -19,6 +19,7 @@ This is the most leveraged moment in any project. Deep questioning here means be
 - `.planning/PROJECT.md` — project context
 - `.planning/config.json` — workflow preferences
 - `.planning/research/` — domain research (optional)
+- `.planning/intel/` — codebase intelligence (auto-populated by hooks)
 - `.planning/REQUIREMENTS.md` — scoped requirements
 - `.planning/ROADMAP.md` — phase structure
 - `.planning/STATE.md` — project memory
@@ -47,42 +48,38 @@ This is the most leveraged moment in any project. Deep questioning here means be
    [ -f .planning/PROJECT.md ] && echo "ERROR: Project already initialized. Use /gsd:progress" && exit 1
    ```
 
-2. **Check for multi-repo mode OR initialize git repo:**
+2. **Detect sub-repos (multi-repo workspace):**
    ```bash
-   # Check for multi-repo config (skip git init entirely)
-   MULTI_REPO="no"
-   if [ -f .planning/config.json ]; then
-       MULTI_REPO=$(grep -q '"multiRepo":[[:space:]]*true' .planning/config.json && echo "yes" || echo "no")
-   fi
-
-   if [ "$MULTI_REPO" = "yes" ]; then
-       echo "Multi-repo mode: skipping git init"
-   elif [ -d .git ] || [ -f .git ]; then
-       echo "Git repo exists in current directory"
+   # Find directories with their own .git folders (potential sub-repos)
+   SUB_REPO_DIRS=$(find . -maxdepth 2 -type d -name ".git" 2>/dev/null | grep -v "^\./.git$" | sed 's|/\.git$||' | sed 's|^\./||' | sort)
+   if [ -n "$SUB_REPO_DIRS" ]; then
+       echo "Detected sub-repos: $SUB_REPO_DIRS"
+       HAS_SUB_REPOS="yes"
    else
-       # Check if parent directories contain separate git repos (multi-repo detection)
-       CHILD_REPOS=$(find . -maxdepth 2 -name ".git" -type d 2>/dev/null | grep -v "^\./\.git$" | head -3)
-       if [ -n "$CHILD_REPOS" ]; then
-           echo "MULTI_REPO_DETECTED"
-           echo "Detected git repos in subdirectories - this appears to be a multi-repo workspace"
-       else
-           git init
-           echo "Initialized new git repo"
-       fi
+       HAS_SUB_REPOS="no"
    fi
    ```
 
-   **If MULTI_REPO_DETECTED:**
-   Use AskUserQuestion:
-   - header: "Multi-Repo"
-   - question: "Detected git repos in subdirectories. Initialize as monorepo or keep multi-repo structure?"
-   - options:
-     - "Keep multi-repo" — Skip git init, create .planning only (Recommended for existing multi-repo projects)
-     - "Create monorepo" — Initialize git at root level
+3. **Initialize git repo in THIS directory** (skip if sub-repos detected):
+   ```bash
+   if [ "$HAS_SUB_REPOS" = "yes" ]; then
+       echo "Sub-repos detected - skipping root git init"
+   elif [ -d .git ] || [ -f .git ]; then
+       echo "Git repo exists in current directory"
+   else
+       git init
+       echo "Initialized new git repo"
+   fi
+   ```
 
-   If "Keep multi-repo": Set `MULTI_REPO="yes"` and continue without git init.
+4. **Create intel directory for codebase intelligence:**
+   ```bash
+   mkdir -p .planning/intel
+   ```
 
-3. **Detect existing code (brownfield detection):**
+   This prepares the directory for the PostToolUse hook to populate with index.json, conventions.json, and summary.md as Claude writes code.
+
+5. **Detect existing code (brownfield detection):**
    ```bash
    CODE_FILES=$(find . -name "*.ts" -o -name "*.js" -o -name "*.py" -o -name "*.go" -o -name "*.rs" -o -name "*.swift" -o -name "*.java" 2>/dev/null | grep -v node_modules | grep -v .git | head -20)
    HAS_PACKAGE=$([ -f package.json ] || [ -f requirements.txt ] || [ -f Cargo.toml ] || [ -f go.mod ] || [ -f Package.swift ] && echo "yes")
@@ -249,27 +246,20 @@ Do not compress. Capture everything gathered.
 
 **Commit PROJECT.md:**
 
-**Skip git operations in multi-repo mode:**
-
 ```bash
 mkdir -p .planning
-# Check if multi-repo mode
-if [ -f .planning/config.json ] && grep -q '"multiRepo":[[:space:]]*true' .planning/config.json; then
-    echo "Multi-repo mode: skipping git commit (files created in .planning/)"
-else
-    git add .planning/PROJECT.md .planning/config.json
-    git commit -m "$(cat <<'EOF'
+git add .planning/PROJECT.md
+git commit -m "$(cat <<'EOF'
 docs: initialize project
 
 [One-liner from PROJECT.md What This Is section]
 EOF
 )"
-fi
 ```
 
 ## Phase 5: Workflow Preferences
 
-Ask all workflow preferences in a single AskUserQuestion call (3 questions):
+**Round 1 — Core workflow settings (4-5 questions):**
 
 ```
 questions: [
@@ -300,11 +290,127 @@ questions: [
       { label: "Parallel (Recommended)", description: "Independent plans run simultaneously" },
       { label: "Sequential", description: "One plan at a time" }
     ]
+  },
+  {
+    header: "Git Tracking",
+    question: "Commit planning docs to git?",
+    multiSelect: false,
+    options: [
+      { label: "Yes (Recommended)", description: "Planning docs tracked in version control" },
+      { label: "No", description: "Keep .planning/ local-only (add to .gitignore)" }
+    ]
   }
 ]
 ```
 
-Create `.planning/config.json` with chosen mode, depth, and parallelization.
+**If sub-repos detected (HAS_SUB_REPOS = "yes"):**
+
+Present additional question to configure sub-repos:
+
+```
+I detected separate git repositories in: [list from SUB_REPO_DIRS]
+
+This appears to be a multi-repo workspace. Code commits will be routed to each sub-repo.
+```
+
+Use AskUserQuestion:
+- header: "Sub-repos"
+- question: "Which directories should receive code commits?"
+- multiSelect: true
+- options: [dynamically from SUB_REPO_DIRS]
+  - "[dir1]" — Detected git repo
+  - "[dir2]" — Detected git repo
+  ...
+
+Selected directories become the `sub_repos` array in config.json.
+
+**If sub-repos configured:** Also set `commit_docs: false` automatically (planning docs stay local).
+
+**Round 2 — Workflow agents:**
+
+These spawn additional agents during planning/execution. They add tokens and time but improve quality.
+
+| Agent | When it runs | What it does |
+|-------|--------------|--------------|
+| **Researcher** | Before planning each phase | Investigates domain, finds patterns, surfaces gotchas |
+| **Plan Checker** | After plan is created | Verifies plan actually achieves the phase goal |
+| **Verifier** | After phase execution | Confirms must-haves were delivered |
+
+All recommended for important projects. Skip for quick experiments.
+
+```
+questions: [
+  {
+    header: "Research",
+    question: "Spawn Plan Researcher? (researches domain before planning — adds tokens/time)",
+    multiSelect: false,
+    options: [
+      { label: "Yes (Recommended)", description: "Research phase goals before planning" },
+      { label: "No", description: "Skip research, plan directly" }
+    ]
+  },
+  {
+    header: "Plan Check",
+    question: "Spawn Plan Checker? (verifies plans before execution — adds tokens/time)",
+    multiSelect: false,
+    options: [
+      { label: "Yes (Recommended)", description: "Verify plans meet phase goals" },
+      { label: "No", description: "Skip plan verification" }
+    ]
+  },
+  {
+    header: "Verifier",
+    question: "Spawn Execution Verifier? (verifies phase completion — adds tokens/time)",
+    multiSelect: false,
+    options: [
+      { label: "Yes (Recommended)", description: "Verify must-haves after execution" },
+      { label: "No", description: "Skip post-execution verification" }
+    ]
+  }
+]
+```
+
+Create `.planning/config.json` with all settings:
+
+```json
+{
+  "mode": "yolo|interactive",
+  "depth": "quick|standard|comprehensive",
+  "parallelization": true|false,
+  "planning": {
+    "commit_docs": true|false,
+    "sub_repos": []
+  },
+  "workflow": {
+    "research": true|false,
+    "plan_check": true|false,
+    "verifier": true|false
+  }
+}
+```
+
+**If sub-repos configured:**
+
+```json
+{
+  "planning": {
+    "commit_docs": false,
+    "sub_repos": ["backend", "frontend", "shared"]
+  }
+}
+```
+
+When `sub_repos` is non-empty:
+- `commit_docs` is automatically set to `false`
+- Code commits are routed to respective sub-repos based on file paths
+- Planning docs remain local-only (no git tracking)
+
+**If commit_docs = No:**
+- Set `commit_docs: false` in config.json
+- Add `.planning/` to `.gitignore` (create if needed)
+
+**If commit_docs = Yes:**
+- Add `.planning/intel/` to `.gitignore` (intel is always local — changes constantly, can be regenerated)
 
 **Commit config.json:**
 
@@ -316,9 +422,32 @@ chore: add project config
 Mode: [chosen mode]
 Depth: [chosen depth]
 Parallelization: [enabled/disabled]
+Workflow agents: research=[on/off], plan_check=[on/off], verifier=[on/off]
 EOF
 )"
 ```
+
+**Note:** Run `/gsd:settings` anytime to update these preferences.
+
+## Phase 5.5: Resolve Model Profile
+
+Read model profile for agent spawning:
+
+```bash
+MODEL_PROFILE=$(cat .planning/config.json 2>/dev/null | grep -o '"model_profile"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"' || echo "balanced")
+```
+
+Default to "balanced" if not set.
+
+**Model lookup table:**
+
+| Agent | quality | balanced | budget |
+|-------|---------|----------|--------|
+| gsd-project-researcher | opus | sonnet | haiku |
+| gsd-research-synthesizer | sonnet | sonnet | haiku |
+| gsd-roadmapper | opus | sonnet | sonnet |
+
+Store resolved models for use in Task calls below.
 
 ## Phase 6: Research Decision
 
@@ -400,7 +529,7 @@ Your STACK.md feeds into roadmap creation. Be prescriptive:
 Write to: .planning/research/STACK.md
 Use template: ~/.claude/get-shit-done/templates/research-project/STACK.md
 </output>
-", subagent_type="gsd-project-researcher", description="Stack research")
+", subagent_type="gsd-project-researcher", model="{researcher_model}", description="Stack research")
 
 Task(prompt="
 <research_type>
@@ -439,7 +568,7 @@ Your FEATURES.md feeds into requirements definition. Categorize clearly:
 Write to: .planning/research/FEATURES.md
 Use template: ~/.claude/get-shit-done/templates/research-project/FEATURES.md
 </output>
-", subagent_type="gsd-project-researcher", description="Features research")
+", subagent_type="gsd-project-researcher", model="{researcher_model}", description="Features research")
 
 Task(prompt="
 <research_type>
@@ -478,7 +607,7 @@ Your ARCHITECTURE.md informs phase structure in roadmap. Include:
 Write to: .planning/research/ARCHITECTURE.md
 Use template: ~/.claude/get-shit-done/templates/research-project/ARCHITECTURE.md
 </output>
-", subagent_type="gsd-project-researcher", description="Architecture research")
+", subagent_type="gsd-project-researcher", model="{researcher_model}", description="Architecture research")
 
 Task(prompt="
 <research_type>
@@ -517,7 +646,7 @@ Your PITFALLS.md prevents mistakes in roadmap/planning. For each pitfall:
 Write to: .planning/research/PITFALLS.md
 Use template: ~/.claude/get-shit-done/templates/research-project/PITFALLS.md
 </output>
-", subagent_type="gsd-project-researcher", description="Pitfalls research")
+", subagent_type="gsd-project-researcher", model="{researcher_model}", description="Pitfalls research")
 ```
 
 After all 4 agents complete, spawn synthesizer to create SUMMARY.md:
@@ -541,7 +670,7 @@ Write to: .planning/research/SUMMARY.md
 Use template: ~/.claude/get-shit-done/templates/research-project/SUMMARY.md
 Commit after writing.
 </output>
-", subagent_type="gsd-research-synthesizer", description="Synthesize research")
+", subagent_type="gsd-research-synthesizer", model="{synthesizer_model}", description="Synthesize research")
 ```
 
 Display research complete banner and key findings:
@@ -746,7 +875,7 @@ Create roadmap:
 
 Write files first, then return. This ensures artifacts persist even if context is lost.
 </instructions>
-", subagent_type="gsd-roadmapper", description="Create roadmap")
+", subagent_type="gsd-roadmapper", model="{roadmapper_model}", description="Create roadmap")
 ```
 
 **Handle roadmapper return:**
@@ -822,7 +951,7 @@ Use AskUserQuestion:
   Update the roadmap based on feedback. Edit files in place.
   Return ROADMAP REVISED with changes made.
   </revision>
-  ", subagent_type="gsd-roadmapper", description="Revise roadmap")
+  ", subagent_type="gsd-roadmapper", model="{roadmapper_model}", description="Revise roadmap")
   ```
 - Present revised roadmap
 - Loop until user approves
@@ -897,6 +1026,7 @@ Present completion with next steps:
   - `ARCHITECTURE.md`
   - `PITFALLS.md`
   - `SUMMARY.md`
+- `.planning/intel/` (created empty, populated by hooks during coding)
 - `.planning/REQUIREMENTS.md`
 - `.planning/ROADMAP.md`
 - `.planning/STATE.md`
@@ -906,11 +1036,11 @@ Present completion with next steps:
 <success_criteria>
 
 - [ ] .planning/ directory created
-- [ ] Git repo initialized (OR skipped if multiRepo: true)
+- [ ] Git repo initialized
 - [ ] Brownfield detection completed
 - [ ] Deep questioning completed (threads followed, not rushed)
 - [ ] PROJECT.md captures full context → **committed**
-- [ ] config.json has workflow mode, depth, parallelization (and multiRepo flag if applicable) → **committed**
+- [ ] config.json has workflow mode, depth, parallelization → **committed**
 - [ ] Research completed (if selected) — 4 parallel agents spawned → **committed**
 - [ ] Requirements gathered (from research or conversation)
 - [ ] User scoped each category (v1/v2/out of scope)
@@ -923,6 +1053,6 @@ Present completion with next steps:
 - [ ] REQUIREMENTS.md traceability updated
 - [ ] User knows next step is `/gsd:discuss-phase 1`
 
-**Atomic commits:** Each phase commits its artifacts immediately. If context is lost, artifacts persist. (Git commits skipped in multiRepo mode — .planning/ acts as local storage only.)
+**Atomic commits:** Each phase commits its artifacts immediately. If context is lost, artifacts persist.
 
 </success_criteria>
