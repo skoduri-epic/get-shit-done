@@ -580,6 +580,41 @@ function extractWikiLinks(content) {
 }
 
 /**
+ * Extract [[wiki-links]] from entity content, separated by section
+ * Returns { dependencies: [], usedBy: [] } for correct edge direction
+ *
+ * - Dependencies: files this entity imports/depends on (source -> target)
+ * - Used By: files that import/use this entity (usedBy -> entity)
+ */
+function extractWikiLinksBySections(content) {
+  const result = { dependencies: [], usedBy: [] };
+
+  // Split content by ## headers
+  const sections = content.split(/\n##\s+/);
+
+  for (const section of sections) {
+    const lines = section.split('\n');
+    const header = lines[0]?.toLowerCase().trim() || '';
+
+    // Extract wiki-links from this section
+    const regex = /\[\[([^\]]+)\]\]/g;
+    let match;
+    while ((match = regex.exec(section)) !== null) {
+      const link = match[1];
+
+      if (header.includes('dependencies') || header.includes('depends on')) {
+        result.dependencies.push(link);
+      } else if (header.includes('used by') || header.includes('dependents')) {
+        result.usedBy.push(link);
+      }
+      // Ignore links in other sections (Purpose, Exports, Notes, etc.)
+    }
+  }
+
+  return result;
+}
+
+/**
  * Parse frontmatter from entity content
  * Returns object with frontmatter fields
  */
@@ -797,6 +832,11 @@ async function generateGraphSummary() {
  * Sync entity file to graph database
  * Called when an entity .md file is written
  *
+ * Edge direction convention:
+ * - source DEPENDS ON target (source imports/uses target)
+ * - For "Dependencies" section: currentEntity -> dependency
+ * - For "Used By" section: usedByEntity -> currentEntity
+ *
  * @param {string} entityPath - Path to entity file
  */
 async function syncEntityToGraph(entityPath) {
@@ -814,7 +854,9 @@ async function syncEntityToGraph(entityPath) {
     const content = fs.readFileSync(entityPath, 'utf8');
     const entityId = path.basename(entityPath, '.md').toLowerCase();
     const frontmatter = parseEntityFrontmatter(content);
-    const links = extractWikiLinks(content);
+
+    // Extract links by section for correct edge direction
+    const { dependencies, usedBy } = extractWikiLinksBySections(content);
 
     // Build node JSON
     const nodeBody = JSON.stringify({
@@ -832,13 +874,29 @@ async function syncEntityToGraph(entityPath) {
       [nodeBody]
     );
 
-    // Delete old edges for this source, insert new ones
+    // Delete old edges where this entity is the SOURCE (its dependencies)
     db.run('DELETE FROM edges WHERE source = ?', [entityId]);
 
-    if (links.length > 0) {
-      const stmt = db.prepare('INSERT INTO edges (source, target) VALUES (?, ?)');
-      for (const target of links) {
-        stmt.run([entityId, target.toLowerCase()]);
+    // Also delete old edges where this entity is the TARGET from "Used By" entries
+    // (we'll re-add them below)
+    db.run('DELETE FROM edges WHERE target = ?', [entityId]);
+
+    // Insert dependency edges: currentEntity -> dependency
+    // (this entity depends on the listed dependencies)
+    if (dependencies.length > 0) {
+      const stmt = db.prepare('INSERT OR REPLACE INTO edges (source, target) VALUES (?, ?)');
+      for (const dep of dependencies) {
+        stmt.run([entityId, dep.toLowerCase()]);
+      }
+      stmt.free();
+    }
+
+    // Insert "used by" edges: usedByEntity -> currentEntity
+    // (the listed files depend on this entity)
+    if (usedBy.length > 0) {
+      const stmt = db.prepare('INSERT OR REPLACE INTO edges (source, target) VALUES (?, ?)');
+      for (const user of usedBy) {
+        stmt.run([user.toLowerCase(), entityId]);
       }
       stmt.free();
     }
