@@ -33,20 +33,20 @@ Proceed to install step (treat as version 0.0.0 for comparison).
 </step>
 
 <step name="check_latest_version">
-Check npm for latest version:
+Check GitHub for latest version from the fork:
 
 ```bash
-npm view get-shit-done-cc version 2>/dev/null
+curl -s https://raw.githubusercontent.com/skoduri-epic/get-shit-done/main/package.json | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '[0-9][^"]*'
 ```
 
-**If npm check fails:**
+**If GitHub check fails:**
 ```
-Couldn't check for updates (offline or npm unavailable).
+Couldn't check for updates (offline or GitHub unavailable).
 
-To update manually: `npx get-shit-done-cc --global`
+To update manually: `npx github:skoduri-epic/get-shit-done --global`
 ```
 
-STOP here if npm unavailable.
+STOP here if GitHub unavailable.
 </step>
 
 <step name="compare_versions">
@@ -129,10 +129,10 @@ Use AskUserQuestion:
 </step>
 
 <step name="run_update">
-Run the update:
+Run the update from the fork:
 
 ```bash
-npx get-shit-done-cc --global
+npx github:skoduri-epic/get-shit-done --global
 ```
 
 Capture output. If install fails, show error and STOP.
@@ -154,7 +154,7 @@ Format completion message (changelog was already shown in confirmation step):
 
 ⚠️  Restart Claude Code to pick up the new commands.
 
-[View full changelog](https://github.com/glittercowboy/get-shit-done/blob/main/CHANGELOG.md)
+[View full changelog](https://github.com/skoduri-epic/get-shit-done/blob/main/CHANGELOG.md)
 ```
 </step>
 
