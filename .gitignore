@@ -1,5 +1,4 @@
 node_modules/
-package-lock.json
 .DS_Store
 TO-DOS.md
 .planning
@@ -12,3 +11,7 @@ commands.html
 
 # Build artifacts - committed for GitHub installs
 # hooks/dist/
+
+# Animation assets
+animation/
+*.gif
