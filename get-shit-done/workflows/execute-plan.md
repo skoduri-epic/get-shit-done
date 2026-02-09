@@ -18,7 +18,7 @@ Load execution context (uses `init execute-phase` for full context, including fi
 INIT=$(node ~/.claude/get-shit-done/bin/gsd-tools.js init execute-phase "${PHASE}" --include state,config)
 ```
 
-Extract from init JSON: `executor_model`, `commit_docs`, `phase_dir`, `phase_number`, `plans`, `summaries`, `incomplete_plans`.
+Extract from init JSON: `executor_model`, `commit_docs`, `sub_repos`, `phase_dir`, `phase_number`, `plans`, `summaries`, `incomplete_plans`.
 
 **File contents (from --include):** `state_content`, `config_content`. Access with:
 ```bash
@@ -255,6 +255,20 @@ git add src/types/user.ts
 | `chore` | Config/deps | chore(08-02): add bcrypt dependency |
 
 **4. Format:** `{type}({phase}-{plan}): {description}` with bullet points for key changes.
+
+<sub_repos_commit_flow>
+**Sub-repos mode:** If `sub_repos` is configured (non-empty array from init context), use `commit-to-subrepo` instead of standard git commit. This routes files to their correct sub-repo based on path prefix.
+
+```bash
+node ~/.claude/get-shit-done/bin/gsd-tools.js commit-to-subrepo "{type}({phase}-{plan}): {description}" --files file1 file2 ...
+```
+
+The command groups files by sub-repo prefix and commits atomically to each. Returns JSON: `{ committed: true, repos: { "backend": { hash: "abc", files: [...] }, ... } }`.
+
+Record hashes from each repo in the response for SUMMARY tracking.
+
+**If `sub_repos` is empty or not set:** Use standard git commit flow below.
+</sub_repos_commit_flow>
 
 **5. Record hash:**
 ```bash

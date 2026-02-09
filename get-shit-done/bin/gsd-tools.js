@@ -16,6 +16,7 @@
  *   resolve-model <agent-type>         Get model for agent based on profile
  *   find-phase <phase>                 Find phase directory by number
  *   commit <message> [--files f1 f2]   Commit planning docs
+ *   commit-to-subrepo <msg> --files f1 f2  Route commits to sub-repos
  *   verify-summary <path>              Verify a SUMMARY.md file
  *   generate-slug <text>               Convert text to URL-safe slug
  *   current-timestamp [format]         Get timestamp (full|date|filename)
@@ -168,6 +169,7 @@ function loadConfig(cwd) {
     verifier: true,
     parallelization: true,
     brave_search: false,
+    sub_repos: [],
   };
 
   try {
@@ -201,6 +203,7 @@ function loadConfig(cwd) {
       verifier: get('verifier', { section: 'workflow', field: 'verifier' }) ?? defaults.verifier,
       parallelization,
       brave_search: get('brave_search') ?? defaults.brave_search,
+      sub_repos: get('sub_repos', { section: 'planning', field: 'sub_repos' }) ?? defaults.sub_repos,
     };
   } catch {
     return defaults;
@@ -1423,6 +1426,70 @@ function cmdCommit(cwd, message, files, raw, amend) {
   const hash = hashResult.exitCode === 0 ? hashResult.stdout : null;
   const result = { committed: true, hash, reason: 'committed' };
   output(result, raw, hash || 'committed');
+}
+
+function cmdCommitToSubrepo(cwd, message, files, raw) {
+  if (!message) {
+    error('commit message required');
+  }
+
+  const config = loadConfig(cwd);
+  const subRepos = config.sub_repos;
+
+  if (!subRepos || subRepos.length === 0) {
+    error('no sub_repos configured in .planning/config.json');
+  }
+
+  if (!files || files.length === 0) {
+    error('--files required for commit-to-subrepo');
+  }
+
+  // Group files by sub-repo prefix
+  const grouped = {};
+  const unmatched = [];
+  for (const file of files) {
+    const match = subRepos.find(repo => file.startsWith(repo + '/'));
+    if (match) {
+      if (!grouped[match]) grouped[match] = [];
+      grouped[match].push(file);
+    } else {
+      unmatched.push(file);
+    }
+  }
+
+  const repos = {};
+  for (const [repo, repoFiles] of Object.entries(grouped)) {
+    const repoCwd = path.join(cwd, repo);
+
+    // Stage files (strip sub-repo prefix for paths relative to that repo)
+    for (const file of repoFiles) {
+      const relativePath = file.slice(repo.length + 1);
+      execGit(repoCwd, ['add', relativePath]);
+    }
+
+    // Commit
+    const commitResult = execGit(repoCwd, ['commit', '-m', message]);
+    if (commitResult.exitCode !== 0) {
+      if (commitResult.stdout.includes('nothing to commit') || commitResult.stderr.includes('nothing to commit')) {
+        repos[repo] = { committed: false, hash: null, files: repoFiles, reason: 'nothing_to_commit' };
+        continue;
+      }
+      repos[repo] = { committed: false, hash: null, files: repoFiles, reason: 'error', error: commitResult.stderr };
+      continue;
+    }
+
+    // Get hash
+    const hashResult = execGit(repoCwd, ['rev-parse', '--short', 'HEAD']);
+    const hash = hashResult.exitCode === 0 ? hashResult.stdout : null;
+    repos[repo] = { committed: true, hash, files: repoFiles };
+  }
+
+  const result = {
+    committed: Object.values(repos).some(r => r.committed),
+    repos,
+    unmatched: unmatched.length > 0 ? unmatched : undefined,
+  };
+  output(result, raw, Object.entries(repos).map(([r, v]) => `${r}:${v.hash || 'skip'}`).join(' '));
 }
 
 function cmdVerifySummary(cwd, summaryPath, checkFileCount, raw) {
@@ -4303,6 +4370,14 @@ async function main() {
       const filesIndex = args.indexOf('--files');
       const files = filesIndex !== -1 ? args.slice(filesIndex + 1).filter(a => !a.startsWith('--')) : [];
       cmdCommit(cwd, message, files, raw, amend);
+      break;
+    }
+
+    case 'commit-to-subrepo': {
+      const message = args[1];
+      const filesIndex = args.indexOf('--files');
+      const files = filesIndex !== -1 ? args.slice(filesIndex + 1).filter(a => !a.startsWith('--')) : [];
+      cmdCommitToSubrepo(cwd, message, files, raw);
       break;
     }
 
