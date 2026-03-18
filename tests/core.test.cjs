@@ -10,14 +10,15 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { createTempProject, cleanup } = require('./helpers.cjs');
 
 const {
   loadConfig,
   resolveModelInternal,
-  MODEL_PROFILES,
   escapeRegex,
   generateSlugInternal,
   normalizePhaseName,
+  normalizeMd,
   comparePhaseNum,
   safeReadFile,
   pathExistsInternal,
@@ -35,14 +36,13 @@ describe('loadConfig', () => {
   let originalCwd;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
     originalCwd = process.cwd();
   });
 
   afterEach(() => {
     process.chdir(originalCwd);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   function writeConfig(obj) {
@@ -129,12 +129,11 @@ describe('resolveModelInternal', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   function writeConfig(obj) {
@@ -147,7 +146,7 @@ describe('resolveModelInternal', () => {
   describe('model profile structural validation', () => {
     test('all known agents resolve to a valid string for each profile', () => {
       const knownAgents = ['gsd-planner', 'gsd-executor', 'gsd-phase-researcher', 'gsd-codebase-mapper'];
-      const profiles = ['quality', 'balanced', 'budget'];
+      const profiles = ['quality', 'balanced', 'budget', 'inherit'];
       const validValues = ['inherit', 'sonnet', 'haiku', 'opus'];
 
       for (const profile of profiles) {
@@ -161,6 +160,14 @@ describe('resolveModelInternal', () => {
         }
       }
     });
+
+    test('inherit profile forces all known agents to inherit model', () => {
+      const knownAgents = ['gsd-planner', 'gsd-executor', 'gsd-phase-researcher', 'gsd-codebase-mapper'];
+      writeConfig({ model_profile: 'inherit' });
+      for (const agent of knownAgents) {
+        assert.strictEqual(resolveModelInternal(tmpDir, agent), 'inherit');
+      }
+    });
   });
 
   describe('override precedence', () => {
@@ -172,11 +179,11 @@ describe('resolveModelInternal', () => {
       assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-executor'), 'haiku');
     });
 
-    test('opus override resolves to inherit', () => {
+    test('opus override resolves to opus', () => {
       writeConfig({
         model_overrides: { 'gsd-executor': 'opus' },
       });
-      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-executor'), 'inherit');
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-executor'), 'opus');
     });
 
     test('agents not in override fall back to profile', () => {
@@ -184,8 +191,8 @@ describe('resolveModelInternal', () => {
         model_profile: 'quality',
         model_overrides: { 'gsd-executor': 'haiku' },
       });
-      // gsd-planner not overridden, should use quality profile -> opus -> inherit
-      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'inherit');
+      // gsd-planner not overridden, should use quality profile -> opus
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'opus');
     });
   });
 
@@ -195,10 +202,15 @@ describe('resolveModelInternal', () => {
       assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), 'sonnet');
     });
 
+    test('returns sonnet for unknown agent type even with inherit profile', () => {
+      writeConfig({ model_profile: 'inherit' });
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-nonexistent'), 'sonnet');
+    });
+
     test('defaults to balanced profile when model_profile missing', () => {
       writeConfig({});
-      // balanced profile, gsd-planner -> opus -> inherit
-      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'inherit');
+      // balanced profile, gsd-planner -> opus
+      assert.strictEqual(resolveModelInternal(tmpDir, 'gsd-planner'), 'opus');
     });
   });
 });
@@ -263,62 +275,11 @@ describe('generateSlugInternal', () => {
   });
 });
 
-// ─── normalizePhaseName ────────────────────────────────────────────────────────
-
-describe('normalizePhaseName', () => {
-  test('pads single digit', () => {
-    assert.strictEqual(normalizePhaseName('1'), '01');
-  });
-
-  test('preserves double digit', () => {
-    assert.strictEqual(normalizePhaseName('12'), '12');
-  });
-
-  test('handles letter suffix', () => {
-    assert.strictEqual(normalizePhaseName('1A'), '01A');
-  });
-
-  test('handles decimal phases', () => {
-    assert.strictEqual(normalizePhaseName('2.1'), '02.1');
-  });
-
-  test('handles multi-level decimals', () => {
-    assert.strictEqual(normalizePhaseName('1.2.3'), '01.2.3');
-  });
-
-  test('returns non-matching input unchanged', () => {
-    assert.strictEqual(normalizePhaseName('abc'), 'abc');
-  });
-});
-
-// ─── comparePhaseNum ───────────────────────────────────────────────────────────
-
-describe('comparePhaseNum', () => {
-  test('sorts integer phases numerically', () => {
-    assert.ok(comparePhaseNum('1', '2') < 0);
-    assert.ok(comparePhaseNum('10', '2') > 0);
-  });
-
-  test('sorts letter suffixes', () => {
-    assert.ok(comparePhaseNum('12', '12A') < 0);
-    assert.ok(comparePhaseNum('12A', '12B') < 0);
-  });
-
-  test('sorts decimal phases', () => {
-    assert.ok(comparePhaseNum('2', '2.1') < 0);
-    assert.ok(comparePhaseNum('2.1', '2.2') < 0);
-  });
-
-  test('handles multi-level decimals', () => {
-    assert.ok(comparePhaseNum('1.1', '1.1.2') < 0);
-    assert.ok(comparePhaseNum('1.1.2', '1.2') < 0);
-  });
-
-  test('returns 0 for equal phases', () => {
-    assert.strictEqual(comparePhaseNum('1', '1'), 0);
-    assert.strictEqual(comparePhaseNum('2.1', '2.1'), 0);
-  });
-});
+// ─── normalizePhaseName / comparePhaseNum ──────────────────────────────────────
+// NOTE: Comprehensive tests for normalizePhaseName and comparePhaseNum are in
+// phase.test.cjs (which covers all edge cases: hybrid, letter-suffix,
+// multi-level decimal, case-insensitive, directory-slug, and full sort order).
+// Removed duplicates here to keep a single authoritative test location.
 
 // ─── safeReadFile ──────────────────────────────────────────────────────────────
 
@@ -330,7 +291,7 @@ describe('safeReadFile', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('reads existing file', () => {
@@ -350,12 +311,11 @@ describe('pathExistsInternal', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('returns true for existing path', () => {
@@ -377,12 +337,11 @@ describe('getMilestoneInfo', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('extracts version and name from roadmap', () => {
@@ -489,7 +448,7 @@ describe('searchPhaseInDir', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('finds phase directory by normalized prefix', () => {
@@ -551,12 +510,11 @@ describe('findPhaseInternal', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('finds phase in current phases directory', () => {
@@ -592,12 +550,11 @@ describe('getRoadmapPhaseInternal', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   // Bug: getRoadmapPhaseInternal was missing from module.exports
@@ -624,8 +581,8 @@ describe('getRoadmapPhaseInternal', () => {
     assert.strictEqual(result.goal, 'Create REST endpoints');
   });
 
-  test('returns null goal when Goal uses colon-outside-bold format', () => {
-    // Actual ROADMAP.md uses **Goal**: (colon outside bold) which the regex does not match
+  test('returns goal when Goal uses colon-outside-bold format', () => {
+    // **Goal**: (colon outside bold) is now supported alongside **Goal:**
     fs.writeFileSync(
       path.join(tmpDir, '.planning', 'ROADMAP.md'),
       '### Phase 1: Foundation\n**Goal**: Build the base\n'
@@ -633,7 +590,7 @@ describe('getRoadmapPhaseInternal', () => {
     const result = getRoadmapPhaseInternal(tmpDir, '1');
     assert.strictEqual(result.found, true);
     assert.strictEqual(result.phase_name, 'Foundation');
-    assert.strictEqual(result.goal, null);
+    assert.strictEqual(result.goal, 'Build the base');
   });
 
   test('returns null when roadmap missing', () => {
@@ -674,12 +631,11 @@ describe('getMilestonePhaseFilter', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-core-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases'), { recursive: true });
+    tmpDir = createTempProject();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup(tmpDir);
   });
 
   test('filters directories to only current milestone phases', () => {
@@ -800,5 +756,114 @@ describe('getMilestonePhaseFilter', () => {
 
     const filter = getMilestonePhaseFilter(tmpDir);
     assert.strictEqual(filter.phaseCount, 0);
+  });
+});
+
+// ─── normalizeMd ─────────────────────────────────────────────────────────────
+
+describe('normalizeMd', () => {
+  test('returns null/undefined/empty unchanged', () => {
+    assert.strictEqual(normalizeMd(null), null);
+    assert.strictEqual(normalizeMd(undefined), undefined);
+    assert.strictEqual(normalizeMd(''), '');
+  });
+
+  test('MD022: adds blank lines around headings', () => {
+    const input = 'Some text\n## Heading\nMore text\n';
+    const result = normalizeMd(input);
+    assert.ok(result.includes('\n\n## Heading\n\n'), 'heading should have blank lines around it');
+  });
+
+  test('MD032: adds blank line before list after non-list content', () => {
+    const input = 'Some text\n- item 1\n- item 2\n';
+    const result = normalizeMd(input);
+    assert.ok(result.includes('Some text\n\n- item 1'), 'list should have blank line before it');
+  });
+
+  test('MD032: adds blank line after list before non-list content', () => {
+    const input = '- item 1\n- item 2\nSome text\n';
+    const result = normalizeMd(input);
+    assert.ok(result.includes('- item 2\n\nSome text'), 'list should have blank line after it');
+  });
+
+  test('MD032: does not add extra blank lines between list items', () => {
+    const input = '- item 1\n- item 2\n- item 3\n';
+    const result = normalizeMd(input);
+    assert.ok(result.includes('- item 1\n- item 2\n- item 3'), 'consecutive list items should not get blank lines');
+  });
+
+  test('MD031: adds blank lines around fenced code blocks', () => {
+    const input = 'Some text\n```js\ncode\n```\nMore text\n';
+    const result = normalizeMd(input);
+    assert.ok(result.includes('Some text\n\n```js'), 'code block should have blank line before');
+    assert.ok(result.includes('```\n\nMore text'), 'code block should have blank line after');
+  });
+
+  test('MD012: collapses 3+ consecutive blank lines to 2', () => {
+    const input = 'Line 1\n\n\n\n\nLine 2\n';
+    const result = normalizeMd(input);
+    assert.ok(!result.includes('\n\n\n'), 'should not have 3+ consecutive blank lines');
+    assert.ok(result.includes('Line 1\n\nLine 2'), 'should collapse to double newline');
+  });
+
+  test('MD047: ensures file ends with single newline', () => {
+    const input = 'Content';
+    const result = normalizeMd(input);
+    assert.ok(result.endsWith('\n'), 'should end with newline');
+    assert.ok(!result.endsWith('\n\n'), 'should not end with double newline');
+  });
+
+  test('MD047: trims trailing multiple newlines', () => {
+    const input = 'Content\n\n\n';
+    const result = normalizeMd(input);
+    assert.ok(result.endsWith('Content\n'), 'should end with single newline after content');
+  });
+
+  test('preserves frontmatter delimiters', () => {
+    const input = '---\nkey: value\n---\n\n# Heading\n\nContent\n';
+    const result = normalizeMd(input);
+    assert.ok(result.startsWith('---\n'), 'should preserve opening frontmatter');
+    assert.ok(result.includes('---\n\n# Heading'), 'should preserve frontmatter closing');
+  });
+
+  test('handles CRLF line endings', () => {
+    const input = 'Some text\r\n## Heading\r\nMore text\r\n';
+    const result = normalizeMd(input);
+    assert.ok(!result.includes('\r'), 'should normalize to LF');
+    assert.ok(result.includes('\n\n## Heading\n\n'), 'should add blank lines around heading');
+  });
+
+  test('handles ordered lists', () => {
+    const input = 'Some text\n1. First\n2. Second\nMore text\n';
+    const result = normalizeMd(input);
+    assert.ok(result.includes('Some text\n\n1. First'), 'ordered list should have blank line before');
+  });
+
+  test('does not add blank line between table and list', () => {
+    const input = '| Col |\n|-----|\n| val |\n- item\n';
+    const result = normalizeMd(input);
+    // Table rows start with |, should not add extra blank before list after table
+    assert.ok(result.includes('| val |\n\n- item'), 'list after table should have blank line');
+  });
+
+  test('complex real-world STATE.md-like content', () => {
+    const input = [
+      '# Project State',
+      '## Current Position',
+      'Phase: 5 of 10',
+      'Status: Executing',
+      '## Decisions',
+      '- Decision 1',
+      '- Decision 2',
+      '## Blockers',
+      'None',
+    ].join('\n');
+    const result = normalizeMd(input);
+    // Every heading should have blank lines around it
+    assert.ok(result.includes('\n\n## Current Position\n\n'), 'section heading needs blank lines');
+    assert.ok(result.includes('\n\n## Decisions\n\n'), 'decisions heading needs blank lines');
+    assert.ok(result.includes('\n\n## Blockers\n\n'), 'blockers heading needs blank lines');
+    // List should have blank line before it
+    assert.ok(result.includes('\n\n- Decision 1'), 'list needs blank line before');
   });
 });

@@ -255,6 +255,34 @@ describe('validate health command', () => {
     );
   });
 
+  test('accepts inherit model_profile as valid', () => {
+    writeMinimalProjectMd(tmpDir);
+    writeMinimalRoadmap(tmpDir, ['1']);
+    writeMinimalStateMd(tmpDir);
+    fs.writeFileSync(
+      path.join(tmpDir, '.planning', 'config.json'),
+      JSON.stringify({
+        model_profile: 'inherit',
+        workflow: {
+          research: true,
+          plan_check: true,
+          verifier: true,
+          nyquist_validation: true,
+        },
+      })
+    );
+    fs.mkdirSync(path.join(tmpDir, '.planning', 'phases', '01-a'), { recursive: true });
+
+    const result = runGsdTools('validate health', tmpDir);
+    assert.ok(result.success, `Command failed: ${result.error}`);
+
+    const output = JSON.parse(result.output);
+    assert.ok(
+      !output.warnings.some(w => w.code === 'W004'),
+      `Should not warn for inherit model_profile: ${JSON.stringify(output.warnings)}`
+    );
+  });
+
   // ─── Check 6: Phase directory naming (NN-name format) ─────────────────────
 
   test('warns about incorrectly named phase directories', () => {
@@ -527,6 +555,15 @@ describe('validate health --repair command', () => {
     assert.ok(fs.existsSync(configPath), 'config.json should now exist on disk');
     const diskConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     assert.strictEqual(diskConfig.model_profile, 'balanced', 'default model_profile should be balanced');
+    // Verify nested workflow structure matches config.cjs canonical format
+    assert.ok(diskConfig.workflow, 'config should have nested workflow object');
+    assert.strictEqual(diskConfig.workflow.research, true, 'workflow.research should default to true');
+    assert.strictEqual(diskConfig.workflow.plan_check, true, 'workflow.plan_check should default to true');
+    assert.strictEqual(diskConfig.workflow.verifier, true, 'workflow.verifier should default to true');
+    assert.strictEqual(diskConfig.workflow.nyquist_validation, true, 'workflow.nyquist_validation should default to true');
+    // Verify branch templates are present
+    assert.strictEqual(diskConfig.phase_branch_template, 'gsd/phase-{phase}-{slug}');
+    assert.strictEqual(diskConfig.milestone_branch_template, 'gsd/{milestone}-{slug}');
   });
 
   test('resets config.json when JSON is invalid', () => {
@@ -545,9 +582,11 @@ describe('validate health --repair command', () => {
     const resetAction = output.repairs_performed.find(r => r.action === 'resetConfig');
     assert.ok(resetAction, `Expected resetConfig action: ${JSON.stringify(output.repairs_performed)}`);
 
-    // Verify config.json is now valid JSON
+    // Verify config.json is now valid JSON with correct nested structure
     const diskConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     assert.ok(typeof diskConfig === 'object', 'config.json should be valid JSON after repair');
+    assert.ok(diskConfig.workflow, 'reset config should have nested workflow object');
+    assert.strictEqual(diskConfig.workflow.research, true, 'workflow.research should be true after reset');
   });
 
   test('regenerates STATE.md when missing', () => {

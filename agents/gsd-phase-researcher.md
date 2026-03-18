@@ -3,8 +3,6 @@ name: gsd-phase-researcher
 description: Researches how to implement a phase before planning. Produces RESEARCH.md consumed by gsd-planner. Spawned by /gsd:plan-phase orchestrator.
 tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch, mcp__context7__*
 color: cyan
-skills:
-  - gsd-researcher-workflow
 # hooks:
 #   PostToolUse:
 #     - matcher: "Write|Edit"
@@ -239,6 +237,12 @@ Priority: Context7 > Official Docs > Official GitHub > Verified WebSearch > Unve
 \`\`\`bash
 npm install [packages]
 \`\`\`
+
+**Version verification:** Before writing the Standard Stack table, verify each recommended package version is current:
+\`\`\`bash
+npm view [package] version
+\`\`\`
+Document the verified version and publish date. Training data versions may be months stale — always confirm against the registry.
 
 ## Architecture Patterns
 
