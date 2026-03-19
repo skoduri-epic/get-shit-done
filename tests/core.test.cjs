@@ -27,6 +27,7 @@ const {
   getRoadmapPhaseInternal,
   searchPhaseInDir,
   findPhaseInternal,
+  findProjectRoot,
 } = require('../get-shit-done/bin/lib/core.cjs');
 
 // ─── loadConfig ────────────────────────────────────────────────────────────────
@@ -865,5 +866,127 @@ describe('normalizeMd', () => {
     assert.ok(result.includes('\n\n## Blockers\n\n'), 'blockers heading needs blank lines');
     // List should have blank line before it
     assert.ok(result.includes('\n\n- Decision 1'), 'list needs blank line before');
+  });
+});
+
+// ─── findProjectRoot ─────────────────────────────────────────────────────────
+
+describe('findProjectRoot', () => {
+  let projectRoot;
+
+  beforeEach(() => {
+    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-root-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  test('returns startDir when no .planning/ exists anywhere', () => {
+    const subDir = path.join(projectRoot, 'backend');
+    fs.mkdirSync(subDir);
+    assert.strictEqual(findProjectRoot(subDir), subDir);
+  });
+
+  test('returns startDir when .planning/ is in startDir itself', () => {
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    assert.strictEqual(findProjectRoot(projectRoot), projectRoot);
+  });
+
+  test('walks up to parent with .planning/ and sub_repos config listing this dir', () => {
+    // Set up project root with .planning/ and sub_repos config
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: ['backend', 'frontend'] })
+    );
+
+    // Create sub-repo directory
+    const backendDir = path.join(projectRoot, 'backend');
+    fs.mkdirSync(backendDir);
+
+    assert.strictEqual(findProjectRoot(backendDir), projectRoot);
+  });
+
+  test('walks up from nested sub-repo subdirectory', () => {
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: ['backend', 'frontend'] })
+    );
+
+    // Create deeply nested path inside sub-repo
+    const deepDir = path.join(projectRoot, 'backend', 'src', 'services');
+    fs.mkdirSync(deepDir, { recursive: true });
+
+    assert.strictEqual(findProjectRoot(deepDir), projectRoot);
+  });
+
+  test('does not walk up when sub_repos does not include the directory', () => {
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: ['backend', 'frontend'] })
+    );
+
+    // Create a directory NOT listed in sub_repos
+    const otherDir = path.join(projectRoot, 'scripts');
+    fs.mkdirSync(otherDir);
+
+    assert.strictEqual(findProjectRoot(otherDir), otherDir);
+  });
+
+  test('walks up when config.json is malformed but sub-repo has .git', () => {
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      'not valid json'
+    );
+
+    // Create sub-repo with its own .git
+    const backendDir = path.join(projectRoot, 'backend');
+    fs.mkdirSync(path.join(backendDir, '.git'), { recursive: true });
+
+    assert.strictEqual(findProjectRoot(backendDir), projectRoot);
+  });
+
+  test('does not walk up when config.json malformed and no .git in sub-dir', () => {
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      'not valid json'
+    );
+
+    // Create sub directory without .git
+    const subDir = path.join(projectRoot, 'tools');
+    fs.mkdirSync(subDir);
+
+    assert.strictEqual(findProjectRoot(subDir), subDir);
+  });
+
+  test('handles planning.sub_repos nested config format', () => {
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      JSON.stringify({ planning: { sub_repos: ['backend'] } })
+    );
+
+    const backendDir = path.join(projectRoot, 'backend');
+    fs.mkdirSync(backendDir);
+
+    assert.strictEqual(findProjectRoot(backendDir), projectRoot);
+  });
+
+  test('returns startDir when sub_repos is empty array', () => {
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: [] })
+    );
+
+    const backendDir = path.join(projectRoot, 'backend');
+    fs.mkdirSync(backendDir);
+
+    assert.strictEqual(findProjectRoot(backendDir), backendDir);
   });
 });

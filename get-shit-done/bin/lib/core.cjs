@@ -14,6 +14,57 @@ function toPosixPath(p) {
   return p.split(path.sep).join('/');
 }
 
+/**
+ * Walk up from `startDir` to find the project root that owns `.planning/`.
+ *
+ * In multi-repo workspaces, Claude may open inside a sub-repo (e.g. `backend/`)
+ * instead of the project root. This function prevents `.planning/` from being
+ * created inside the sub-repo by locating the nearest ancestor that already has
+ * a `.planning/` directory, or whose `.planning/config.json` lists `sub_repos`.
+ *
+ * Returns `startDir` unchanged when no ancestor `.planning/` is found (first-run
+ * or single-repo projects).
+ */
+function findProjectRoot(startDir) {
+  const resolved = path.resolve(startDir);
+  const root = path.parse(resolved).root;
+  const homedir = require('os').homedir();
+
+  let dir = resolved;
+  while (dir !== root) {
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // filesystem root
+    if (parent === homedir) break; // never go above home
+
+    const parentPlanning = path.join(parent, '.planning');
+    if (fs.existsSync(parentPlanning) && fs.statSync(parentPlanning).isDirectory()) {
+      // Verify this parent considers startDir a sub-repo
+      const configPath = path.join(parentPlanning, 'config.json');
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const subRepos = config.sub_repos || config.planning?.sub_repos || [];
+        if (Array.isArray(subRepos) && subRepos.length > 0) {
+          // Check if our startDir is inside one of the declared sub-repos
+          const relPath = path.relative(parent, resolved);
+          const topSegment = relPath.split(path.sep)[0];
+          if (subRepos.includes(topSegment)) {
+            return parent;
+          }
+        }
+      } catch {
+        // config.json missing or malformed — still return parent if .planning exists
+        // and startDir has its own .git (strong signal it's a sub-repo)
+        const startGit = path.join(resolved, '.git');
+        if (fs.existsSync(startGit)) {
+          return parent;
+        }
+      }
+    }
+    dir = parent;
+  }
+  return startDir;
+}
+
 // ─── Output helpers ───────────────────────────────────────────────────────────
 
 function output(result, raw, rawValue) {
@@ -710,5 +761,6 @@ module.exports = {
   extractCurrentMilestone,
   replaceInCurrentMilestone,
   toPosixPath,
+  findProjectRoot,
   MODEL_ALIAS_MAP,
 };
