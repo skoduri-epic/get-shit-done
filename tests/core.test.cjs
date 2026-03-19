@@ -28,6 +28,7 @@ const {
   searchPhaseInDir,
   findPhaseInternal,
   findProjectRoot,
+  detectSubRepos,
 } = require('../get-shit-done/bin/lib/core.cjs');
 
 // ─── loadConfig ────────────────────────────────────────────────────────────────
@@ -869,6 +870,122 @@ describe('normalizeMd', () => {
   });
 });
 
+// ─── detectSubRepos ──────────────────────────────────────────────────────────
+
+describe('detectSubRepos', () => {
+  let projectRoot;
+
+  beforeEach(() => {
+    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-detect-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  test('returns empty array when no child directories have .git', () => {
+    fs.mkdirSync(path.join(projectRoot, 'src'));
+    fs.mkdirSync(path.join(projectRoot, 'lib'));
+    assert.deepStrictEqual(detectSubRepos(projectRoot), []);
+  });
+
+  test('detects directories with .git', () => {
+    fs.mkdirSync(path.join(projectRoot, 'backend', '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'frontend', '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'scripts')); // no .git
+    assert.deepStrictEqual(detectSubRepos(projectRoot), ['backend', 'frontend']);
+  });
+
+  test('returns sorted results', () => {
+    fs.mkdirSync(path.join(projectRoot, 'zeta', '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'alpha', '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'mid', '.git'), { recursive: true });
+    assert.deepStrictEqual(detectSubRepos(projectRoot), ['alpha', 'mid', 'zeta']);
+  });
+
+  test('skips hidden directories', () => {
+    fs.mkdirSync(path.join(projectRoot, '.hidden', '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'visible', '.git'), { recursive: true });
+    assert.deepStrictEqual(detectSubRepos(projectRoot), ['visible']);
+  });
+
+  test('skips node_modules', () => {
+    fs.mkdirSync(path.join(projectRoot, 'node_modules', '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'app', '.git'), { recursive: true });
+    assert.deepStrictEqual(detectSubRepos(projectRoot), ['app']);
+  });
+});
+
+// ─── loadConfig sub_repos auto-sync ──────────────────────────────────────────
+
+describe('loadConfig sub_repos auto-sync', () => {
+  let projectRoot;
+
+  beforeEach(() => {
+    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-sync-test-'));
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  test('migrates multiRepo: true to sub_repos array', () => {
+    // Create config with legacy multiRepo flag
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      JSON.stringify({ multiRepo: true, model_profile: 'quality' })
+    );
+    // Create sub-repos
+    fs.mkdirSync(path.join(projectRoot, 'backend', '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'frontend', '.git'), { recursive: true });
+
+    const config = loadConfig(projectRoot);
+    assert.deepStrictEqual(config.sub_repos, ['backend', 'frontend']);
+    assert.strictEqual(config.commit_docs, false);
+
+    // Verify config was persisted
+    const saved = JSON.parse(fs.readFileSync(path.join(projectRoot, '.planning', 'config.json'), 'utf-8'));
+    assert.deepStrictEqual(saved.sub_repos, ['backend', 'frontend']);
+    assert.strictEqual(saved.multiRepo, undefined, 'multiRepo should be removed');
+  });
+
+  test('adds newly detected repos to sub_repos', () => {
+    fs.mkdirSync(path.join(projectRoot, 'backend', '.git'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: ['backend'] })
+    );
+
+    // Add a new repo
+    fs.mkdirSync(path.join(projectRoot, 'frontend', '.git'), { recursive: true });
+
+    const config = loadConfig(projectRoot);
+    assert.deepStrictEqual(config.sub_repos, ['backend', 'frontend']);
+  });
+
+  test('removes repos that no longer have .git', () => {
+    fs.mkdirSync(path.join(projectRoot, 'backend', '.git'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: ['backend', 'old-repo'] })
+    );
+
+    const config = loadConfig(projectRoot);
+    assert.deepStrictEqual(config.sub_repos, ['backend']);
+  });
+
+  test('does not sync when sub_repos is empty and no repos detected', () => {
+    fs.writeFileSync(
+      path.join(projectRoot, '.planning', 'config.json'),
+      JSON.stringify({ sub_repos: [] })
+    );
+
+    const config = loadConfig(projectRoot);
+    assert.deepStrictEqual(config.sub_repos, []);
+  });
+});
+
 // ─── findProjectRoot ─────────────────────────────────────────────────────────
 
 describe('findProjectRoot', () => {
@@ -894,14 +1011,12 @@ describe('findProjectRoot', () => {
   });
 
   test('walks up to parent with .planning/ and sub_repos config listing this dir', () => {
-    // Set up project root with .planning/ and sub_repos config
     fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
     fs.writeFileSync(
       path.join(projectRoot, '.planning', 'config.json'),
       JSON.stringify({ sub_repos: ['backend', 'frontend'] })
     );
 
-    // Create sub-repo directory
     const backendDir = path.join(projectRoot, 'backend');
     fs.mkdirSync(backendDir);
 
@@ -915,53 +1030,42 @@ describe('findProjectRoot', () => {
       JSON.stringify({ sub_repos: ['backend', 'frontend'] })
     );
 
-    // Create deeply nested path inside sub-repo
     const deepDir = path.join(projectRoot, 'backend', 'src', 'services');
     fs.mkdirSync(deepDir, { recursive: true });
 
     assert.strictEqual(findProjectRoot(deepDir), projectRoot);
   });
 
-  test('does not walk up when sub_repos does not include the directory', () => {
+  test('walks up via legacy multiRepo flag', () => {
     fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
     fs.writeFileSync(
       path.join(projectRoot, '.planning', 'config.json'),
-      JSON.stringify({ sub_repos: ['backend', 'frontend'] })
+      JSON.stringify({ multiRepo: true })
     );
 
-    // Create a directory NOT listed in sub_repos
-    const otherDir = path.join(projectRoot, 'scripts');
-    fs.mkdirSync(otherDir);
-
-    assert.strictEqual(findProjectRoot(otherDir), otherDir);
-  });
-
-  test('walks up when config.json is malformed but sub-repo has .git', () => {
-    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
-    fs.writeFileSync(
-      path.join(projectRoot, '.planning', 'config.json'),
-      'not valid json'
-    );
-
-    // Create sub-repo with its own .git
     const backendDir = path.join(projectRoot, 'backend');
     fs.mkdirSync(path.join(backendDir, '.git'), { recursive: true });
 
     assert.strictEqual(findProjectRoot(backendDir), projectRoot);
   });
 
-  test('does not walk up when config.json malformed and no .git in sub-dir', () => {
+  test('walks up via .git heuristic when no config exists', () => {
     fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
-    fs.writeFileSync(
-      path.join(projectRoot, '.planning', 'config.json'),
-      'not valid json'
-    );
+    // No config.json at all
 
-    // Create sub directory without .git
-    const subDir = path.join(projectRoot, 'tools');
-    fs.mkdirSync(subDir);
+    const backendDir = path.join(projectRoot, 'backend');
+    fs.mkdirSync(path.join(backendDir, '.git'), { recursive: true });
 
-    assert.strictEqual(findProjectRoot(subDir), subDir);
+    assert.strictEqual(findProjectRoot(backendDir), projectRoot);
+  });
+
+  test('does not walk up for dirs without .git when no sub_repos config', () => {
+    fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
+
+    const scriptsDir = path.join(projectRoot, 'scripts');
+    fs.mkdirSync(scriptsDir);
+
+    assert.strictEqual(findProjectRoot(scriptsDir), scriptsDir);
   });
 
   test('handles planning.sub_repos nested config format', () => {
@@ -977,7 +1081,7 @@ describe('findProjectRoot', () => {
     assert.strictEqual(findProjectRoot(backendDir), projectRoot);
   });
 
-  test('returns startDir when sub_repos is empty array', () => {
+  test('returns startDir when sub_repos is empty and no .git', () => {
     fs.mkdirSync(path.join(projectRoot, '.planning'), { recursive: true });
     fs.writeFileSync(
       path.join(projectRoot, '.planning', 'config.json'),
