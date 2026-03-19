@@ -292,6 +292,10 @@ function cmdCommitToSubrepo(cwd, message, files, raw) {
     }
   }
 
+  if (unmatched.length > 0) {
+    process.stderr.write(`Warning: ${unmatched.length} file(s) did not match any sub-repo prefix: ${unmatched.join(', ')}\n`);
+  }
+
   const repos = {};
   for (const [repo, repoFiles] of Object.entries(grouped)) {
     const repoCwd = path.join(cwd, repo);

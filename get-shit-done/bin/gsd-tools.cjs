@@ -171,10 +171,6 @@ async function main() {
     error(`Invalid --cwd: ${cwd}`);
   }
 
-  // Multi-repo guard: if CWD is inside a sub-repo, walk up to the project root
-  // so .planning/ is read/written at the correct level.
-  cwd = findProjectRoot(cwd);
-
   const rawIndex = args.indexOf('--raw');
   const raw = rawIndex !== -1;
   if (rawIndex !== -1) args.splice(rawIndex, 1);
@@ -183,6 +179,17 @@ async function main() {
 
   if (!command) {
     error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, init');
+  }
+
+  // Multi-repo guard: resolve project root for commands that read/write .planning/.
+  // Skip for pure-utility commands that don't touch .planning/ to avoid unnecessary
+  // filesystem traversal on every invocation.
+  const SKIP_ROOT_RESOLUTION = new Set([
+    'generate-slug', 'current-timestamp', 'verify-path-exists',
+    'verify-summary', 'template', 'frontmatter',
+  ]);
+  if (!SKIP_ROOT_RESOLUTION.has(command)) {
+    cwd = findProjectRoot(cwd);
   }
 
   switch (command) {
