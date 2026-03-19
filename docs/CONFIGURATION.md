@@ -133,6 +133,8 @@ To keep planning artifacts out of git:
 | `parallelization.max_concurrent_agents` | number | `3` | Maximum simultaneous agents |
 | `parallelization.min_plans_for_parallel` | number | `2` | Minimum plans to trigger parallel execution |
 
+> **Pre-commit hooks and parallel execution**: When parallelization is enabled, executor agents commit with `--no-verify` to avoid build lock contention (e.g., cargo lock fights in Rust projects). The orchestrator validates hooks once after each wave completes. STATE.md writes are protected by file-level locking to prevent concurrent write corruption. If you need hooks to run per-commit, set `parallelization.enabled: false`.
+
 ---
 
 ## Git Branching
@@ -246,7 +248,7 @@ Valid override values: `opus`, `sonnet`, `haiku`, `inherit`
 | `quality` | Opus for all decision-making, Sonnet for verification | Quota available, critical architecture work |
 | `balanced` | Opus for planning only, Sonnet for everything else | Normal development (default) |
 | `budget` | Sonnet for code-writing, Haiku for research/verification | High-volume work, less critical phases |
-| `inherit` | All agents use current session model | Dynamic model switching (OpenCode `/model`) |
+| `inherit` | All agents use current session model | Dynamic model switching, **non-Anthropic providers** (OpenRouter, local models) |
 
 ---
 

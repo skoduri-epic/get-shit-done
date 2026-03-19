@@ -162,6 +162,7 @@ function loadConfig(cwd) {
     brave_search: false,
     sub_repos: [],
     resolve_model_ids: false, // when true, resolve aliases (opus/sonnet/haiku) to full model IDs
+    context_window: 200000, // default 200k; set to 1000000 for Opus/Sonnet 4.6 1M models
   };
 
   try {
@@ -173,7 +174,7 @@ function loadConfig(cwd) {
       const depthToGranularity = { quick: 'coarse', standard: 'standard', comprehensive: 'fine' };
       parsed.granularity = depthToGranularity[parsed.depth] || parsed.depth;
       delete parsed.depth;
-      try { fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf-8'); } catch {}
+      try { fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), 'utf-8'); } catch { /* intentionally empty */ }
     }
 
     // Auto-detect and sync sub_repos: scan for child directories with .git
@@ -239,6 +240,7 @@ function loadConfig(cwd) {
       brave_search: get('brave_search') ?? defaults.brave_search,
       sub_repos: get('sub_repos', { section: 'planning', field: 'sub_repos' }) ?? defaults.sub_repos,
       resolve_model_ids: get('resolve_model_ids') ?? defaults.resolve_model_ids,
+      context_window: get('context_window') ?? defaults.context_window,
       model_overrides: parsed.model_overrides || null,
     };
   } catch {
@@ -381,6 +383,27 @@ function execGit(cwd, args) {
   };
 }
 
+// ─── Common path helpers ──────────────────────────────────────────────────────
+
+/** Get the .planning directory path */
+function planningDir(cwd) {
+  return path.join(cwd, '.planning');
+}
+
+/** Get common .planning file paths */
+function planningPaths(cwd) {
+  const base = path.join(cwd, '.planning');
+  return {
+    planning: base,
+    state: path.join(base, 'STATE.md'),
+    roadmap: path.join(base, 'ROADMAP.md'),
+    project: path.join(base, 'PROJECT.md'),
+    config: path.join(base, 'config.json'),
+    phases: path.join(base, 'phases'),
+    requirements: path.join(base, 'REQUIREMENTS.md'),
+  };
+}
+
 // ─── Phase utilities ──────────────────────────────────────────────────────────
 
 function escapeRegex(value) {
@@ -501,7 +524,7 @@ function findPhaseInternal(cwd, phase) {
         return result;
       }
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   return null;
 }
@@ -536,7 +559,7 @@ function getArchivedPhaseDirs(cwd) {
         });
       }
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   return results;
 }
@@ -794,7 +817,7 @@ function getMilestonePhaseFilter(cwd) {
     while ((m = phasePattern.exec(roadmap)) !== null) {
       milestonePhaseNums.add(m[1]);
     }
-  } catch {}
+  } catch { /* intentionally empty */ }
 
   if (milestonePhaseNums.size === 0) {
     const passAll = () => true;
@@ -842,4 +865,6 @@ module.exports = {
   findProjectRoot,
   detectSubRepos,
   MODEL_ALIAS_MAP,
+  planningDir,
+  planningPaths,
 };
