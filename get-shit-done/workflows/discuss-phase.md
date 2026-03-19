@@ -110,6 +110,18 @@ Phase: "API documentation"
 1. Retry the question once with the same parameters
 2. If still empty, present the options as a plain-text numbered list and ask the user to type their choice number
 Never proceed with an empty answer.
+
+**Text mode (`workflow.text_mode: true` in config or `--text` flag):**
+When text mode is active, **do not use AskUserQuestion at all**. Instead, present every
+question as a plain-text numbered list and ask the user to type their choice number.
+This is required for Claude Code remote sessions (`/rc` mode) where the Claude App
+cannot forward TUI menu selections back to the host.
+
+Enable text mode:
+- Per-session: pass `--text` flag to any command (e.g., `/gsd:discuss-phase --text`)
+- Per-project: `gsd-tools config-set workflow.text_mode true`
+
+Text mode applies to ALL workflows in the session, not just discuss-phase.
 </answer_validation>
 
 <process>
@@ -464,6 +476,13 @@ With that context: How should users authenticate?
 
 When disabled (default), skip the research and present questions directly as before.
 
+**Text mode support:** Parse optional `--text` from `$ARGUMENTS`.
+- Accept `--text` flag OR read `workflow.text_mode` from config (from init context)
+- When active, replace ALL `AskUserQuestion` calls with plain-text numbered lists
+- User types a number to select, or types free text for "Other"
+- This is required for Claude Code remote sessions (`/rc` mode) where TUI menus
+  don't work through the Claude App
+
 **Batch mode support:** Parse optional `--batch` from `$ARGUMENTS`.
 - Accept `--batch`, `--batch=N`, or `--batch N`
 
@@ -584,10 +603,22 @@ Back to [current area]: [return to current question]"
 ```
 
 Track deferred ideas internally.
+
+**Track discussion log data internally:**
+For each question asked, accumulate:
+- Area name
+- All options presented (label + description)
+- Which option the user selected (or their free-text response)
+- Any follow-up notes or clarifications the user provided
+This data is used to generate DISCUSSION-LOG.md in the `write_context` step.
 </step>
 
 <step name="write_context">
 Create CONTEXT.md capturing decisions made.
+
+**Also generate DISCUSSION-LOG.md** — a full audit trail of the discuss-phase Q&A.
+This file is for human reference only (software audits, compliance reviews). It is NOT
+consumed by downstream agents (researcher, planner, executor).
 
 **Find or create phase directory:**
 
@@ -743,10 +774,54 @@ Created: .planning/phases/${PADDED_PHASE}-${SLUG}/${PADDED_PHASE}-CONTEXT.md
 </step>
 
 <step name="git_commit">
-Commit phase context (uses `commit_docs` from init internally):
+**Write DISCUSSION-LOG.md before committing:**
+
+**File location:** `${phase_dir}/${padded_phase}-DISCUSSION-LOG.md`
+
+```markdown
+# Phase [X]: [Name] - Discussion Log
+
+> **Audit trail only.** Do not use as input to planning, research, or execution agents.
+> Decisions are captured in CONTEXT.md — this log preserves the alternatives considered.
+
+**Date:** [ISO date]
+**Phase:** [phase number]-[phase name]
+**Areas discussed:** [comma-separated list]
+
+---
+
+[For each gray area discussed:]
+
+## [Area Name]
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| [Option 1] | [Description from AskUserQuestion] | |
+| [Option 2] | [Description] | ✓ |
+| [Option 3] | [Description] | |
+
+**User's choice:** [Selected option or free-text response]
+**Notes:** [Any clarifications, follow-up context, or rationale the user provided]
+
+---
+
+[Repeat for each area]
+
+## Claude's Discretion
+
+[List areas where user said "you decide" or deferred to Claude]
+
+## Deferred Ideas
+
+[Ideas mentioned during discussion that were noted for future phases]
+```
+
+Write file.
+
+Commit phase context and discussion log:
 
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(${padded_phase}): capture phase context" --files "${phase_dir}/${padded_phase}-CONTEXT.md"
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(${padded_phase}): capture phase context" --files "${phase_dir}/${padded_phase}-CONTEXT.md" "${phase_dir}/${padded_phase}-DISCUSSION-LOG.md"
 ```
 
 Confirm: "Committed: docs(${padded_phase}): capture phase context"
